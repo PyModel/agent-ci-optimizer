@@ -16,7 +16,7 @@ Accessed 2026-11-01. Versions move: re-open the page before quoting a version, f
 | setup-node / setup-python caching | npm auto-cache only with `packageManager`; python opt-in | https://github.com/actions/setup-node · https://github.com/actions/setup-python |
 | Nx affected | default base main; `NX_BASE`/`NX_HEAD`; `nx-set-shas` | https://nx.dev/docs/features/ci-features/affected |
 | Turborepo affected | `--affected` = `--filter=...[main...HEAD]`; `TURBO_SCM_BASE`; shallow checkout ⇒ everything changed | https://turborepo.dev/docs/reference/run |
-| Blacksmith | label format; free tier minutes; marketing speed claim | https://docs.blacksmith.sh/blacksmith-runners/overview |
+| Blacksmith | label format; free tier minutes; marketing speed claim; per-job Firecracker microVM, destroyed after the job | https://docs.blacksmith.sh/blacksmith-runners/overview · https://www.blacksmith.sh/security |
 | Depot | label; ephemeral single-tenant EC2; per-second billing | https://depot.dev/docs/github-actions/overview |
 | Larger runners | Team / Enterprise Cloud only; per-minute billing | https://docs.github.com/en/actions/concepts/runners/larger-runners |
 | Runner pricing | per-minute rates by label | https://docs.github.com/en/billing/reference/actions-runner-pricing |
@@ -24,4 +24,4 @@ Accessed 2026-11-01. Versions move: re-open the page before quoting a version, f
 
 ## Not confirmed on 2026-11-01
 
-Do not assert these without a fresh source: Blacksmith isolation model and per-minute price; whether TS 7 `tsc` has declaration-emit gaps; Nx merge-base semantics in detail.
+Do not assert these without a fresh source: Blacksmith per-minute price; whether TS 7 `tsc` has declaration-emit gaps; Nx merge-base semantics in detail.

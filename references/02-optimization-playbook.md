@@ -10,7 +10,7 @@ Each module: when it applies, the experiment, the counterexamples that make it a
 
 **Options** (verify current terms; vendor speed claims are marketing, not evidence for this repo):
 - GitHub larger runners: Team or Enterprise Cloud plans only; billed per minute, including on public repos.
-- Blacksmith: labels like `blacksmith-4vcpu-ubuntu-2404`; isolation model and per-minute price were not confirmed from docs on 2026-11-01. Ask the vendor before approving.
+- Blacksmith: labels like `blacksmith-4vcpu-ubuntu-2404`; each job runs in a Firecracker microVM on Blacksmith's bare metal, destroyed after the job. Per-minute price not confirmed from docs on 2026-11-01: get a quote before approving.
 - Depot: `depot-ubuntu-24.04`; ephemeral single-tenant EC2 instances, never reused; per-second billing.
 - Self-hosted: only ephemeral (one job per VM/container). Persistent runners on public repos let fork PRs execute on your hardware.
 
