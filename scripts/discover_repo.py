@@ -100,7 +100,20 @@ WORKFLOW_PATTERNS = {
     "timeout": re.compile(r"timeout-minutes:\s*(\S+)"),
     "unpinned_action": re.compile(r"uses:\s*([\w.-]+/[\w./-]+)@(?![0-9a-f]{40}\b)(\S+)"),
     "merge_group": re.compile(r"\bmerge_group\b"),
+    "pr_types": re.compile(r"^\s*types:\s*(.*\b(?:edited|labeled|unlabeled|assigned|review_requested)\b.*)$"),
+    "draft_gate": re.compile(r"pull_request\.draft"),
+    "submodules_or_lfs": re.compile(r"^\s*(?:submodules:\s*(?:true|recursive)|lfs:\s*true)\b"),
+    "max_parallel": re.compile(r"max-parallel:\s*(\S+)"),
+    "fail_fast": re.compile(r"fail-fast:\s*(\S+)"),
+    "cancel_in_progress_false": re.compile(r"cancel-in-progress:\s*false\b"),
+    "cron": re.compile(r"cron:\s*(.+)$"),
+    "image_latest": re.compile(r"(?:image:\s*['\"]?|docker://)([\w./-]+:latest)\b"),
+    "sleep": re.compile(r"\bsleep\s+(\d+)"),
+    "id_token_write": re.compile(r"id-token:\s*write"),
+    "no_cache_or_clean": re.compile(r"(--no-cache\b|\brm -rf\s+\S+)"),
 }
+USES = re.compile(r"uses:\s*([\w.-]+/[\w./-]+)@(\S+)")
+SHA = re.compile(r"^[0-9a-f]{40}$")
 DEP_HINTS = (
     "eslint", "oxlint", "@biomejs/biome", "typescript", "@typescript/native-preview",
     "vitest", "jest", "mocha", "playwright", "@playwright/test", "cypress", "nx",
@@ -155,15 +168,47 @@ def package_meta(path: Path) -> dict:
     }
 
 
+ON_FLOW = re.compile(r"""^['"]?on['"]?:\s*(\[.*\]|\w+)\s*$""")
+PUSH_KEY = re.compile(r"^(\s*)push:\s*(\{\s*\}|null|~)?\s*$")
+PR_EVENT = re.compile(r"\bpull_request\b(?!_target)")
+PUSH_FILTER = re.compile(r"^\s*(branches|branches-ignore|tags|tags-ignore):")
+
+
+def unfiltered_push(lines: list[str]) -> int | None:
+    """Line of a `push` trigger with no branch/tag filter in a workflow that also runs
+    on pull_request: every PR commit then runs twice. Line heuristics, not YAML."""
+    if not any(PR_EVENT.search(l.split("#", 1)[0]) for l in lines):
+        return None
+    for i, line in enumerate(lines):
+        flow = ON_FLOW.match(line)
+        if flow and re.search(r"\bpush\b", flow.group(1)):
+            return i + 1
+        key = PUSH_KEY.match(line)
+        if not key:
+            continue
+        indent, children = len(key.group(1)), []
+        for child in lines[i + 1:]:
+            if child.strip() and len(child) - len(child.lstrip()) <= indent:
+                break
+            children.append(child)
+        if not any(PUSH_FILTER.match(c) for c in children):
+            return i + 1
+    return None
+
+
 def workflow_meta(path: Path) -> dict:
     text = read_text(path)
     if text is None:
         return {"error": "unreadable or too large"}
     hits: dict[str, list] = {}
+    pins = [0, 0]  # [pinned to a full SHA, total remote `uses:`]
     for lineno, line in enumerate(text.splitlines(), 1):
         stripped = line.split(" #", 1)[0] if not line.lstrip().startswith("#") else ""
         if not stripped.strip():
             continue
+        for m in USES.finditer(stripped):
+            pins[1] += 1
+            pins[0] += bool(SHA.match(m.group(2)))
         for key, rx in WORKFLOW_PATTERNS.items():
             for m in rx.finditer(stripped):
                 value = m.group(1).strip() if m.groups() and m.group(1) else stripped.strip()
@@ -172,7 +217,18 @@ def workflow_meta(path: Path) -> dict:
                 hits.setdefault(key, []).append({"line": lineno, "value": value[:200]})
     if "secret_names" in hits:
         hits["secret_names"] = sorted({h["value"] for h in hits["secret_names"]})
+    push_line = unfiltered_push(text.splitlines())
+    if push_line:
+        hits["push_and_pr_unfiltered"] = [{"line": push_line, "value": "push without branches/tags + pull_request"}]
+    if pins[1]:
+        hits["action_pins"] = {"pinned": pins[0], "total": pins[1]}
     return hits
+
+
+def pinned_ratio(workflows: dict) -> dict | str:
+    pinned = sum(w.get("action_pins", {}).get("pinned", 0) for w in workflows.values())
+    total = sum(w.get("action_pins", {}).get("total", 0) for w in workflows.values())
+    return {"pinned": pinned, "total": total, "value": round(pinned / total, 4)} if total else "unknown"
 
 
 def discover(root: Path) -> dict:
@@ -215,6 +271,7 @@ def discover(root: Path) -> dict:
             "project_graph_present": bool(found["monorepo"]),
             "hooks_present": bool(found["hooks"]),
             "ci_provider_count": len({p.split("/")[0] for p in found["ci"]}),
+            "pinned_action_ratio": pinned_ratio(workflows),
         },
         "limitations": [
             "File-name and regex heuristics only; verify every finding by reading the file.",

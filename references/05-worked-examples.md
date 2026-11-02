@@ -35,3 +35,11 @@ Illustrative shapes, not measurements. Numbers here show the reasoning; never co
 **Observed:** coding agents push every few minutes; 60% of runs cancelled or superseded; flake rate 8% on e2e.
 
 **Plan:** `cancel-in-progress` on PR refs; pre-push hook running the exact CI lint/type commands (module 7) so agents see red locally; quarantine list for known flaky e2e **with an owner and expiry**, tracked in `flake-audit.md`, never silent skips; e2e moved to `merge_group` + nightly if product owners accept the latency trade.
+
+## E. "Build once, share the artifact" that made CI slower
+
+**Observed:** three test jobs each run their own 90 s build in parallel; the slowest test job gates at 8 min. Lint finishes at 3 min.
+
+**Tempting plan:** one `build` job, tests `needs: build` and download its artifact. Runner-minutes drop by two builds per run.
+
+**Check before proposing:** Δ wall-clock = +90 s new serial build + 30 s artifact download on the slowest test job − 90 s build removed from it = **+30 s per run**. That is a bill-only change and goes in the runner-minutes column, labelled as adding wait. A warm build cache in each test job is the speed alternative. Separately, a faster lint saves 0 s of wait: it already finishes 5 min before the gate ([floor rule](04-measurement-benchmarking.md#sizing-and-combining-savings)).

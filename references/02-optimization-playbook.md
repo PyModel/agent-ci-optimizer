@@ -28,7 +28,7 @@ Each module: when it applies, the experiment, the counterexamples that make it a
 
 **Counterexamples.** Custom ESLint rules or plugins with no Oxlint equivalent; framework files (Vue, Svelte, Astro, MDX, Angular) that still need TS 6 tooling; repo relies on TS compiler API (codegen, typed lint rules).
 
-**Gate.** Every dropped rule listed with a reason or kept in a fallback ESLint pass; zero new false negatives on a seeded-violation fixture; build/declaration gates unchanged.
+**Gate.** Every dropped rule listed with a reason or kept in a fallback ESLint pass; removing or replacing any check needs a coverage table (what the old step uniquely caught → which remaining step catches it), or the change stays an experiment; zero new false negatives on a seeded-violation fixture; build/declaration gates unchanged.
 
 ## 3. Bigger machines and Vitest reuse
 
@@ -50,7 +50,7 @@ Each module: when it applies, the experiment, the counterexamples that make it a
 
 **Clone.** `actions/checkout` defaults to `fetch-depth: 1`. `filter: blob:none` gives a partial clone (blobs fetched on demand) and overrides sparse-checkout; it does **not** change depth by itself. Affected tools need the base commit: Turborepo treats every package as changed when the checkout is too shallow; Nx needs `NX_BASE` reachable. Typical fix: `fetch-depth: 0` + `filter: blob:none`.
 
-**Counterexamples.** Cache restore slower than install (small deps, slow cache backend); cache size near the repo limit causing eviction churn; tools that read every blob (`git log -p`, some changelog generators) negate blobless clones.
+**Counterexamples.** Cache restore slower than install (small deps, slow cache backend); an *existing* cache can be a loss too: compare the restore step's p50 with the install step's p50 on cache-hit runs before keeping it; cache size near the repo limit causing eviction churn; tools that read every blob (`git log -p`, some changelog generators) negate blobless clones. Shallow checkout is wrong for jobs that need history: changelog and release-notes generation, merge-base or affected computation, `git describe` versioning. Submodule or LFS checkout in a job that never reads those paths is pure payload.
 
 **Gate.** Cold path still correct (delete cache, rerun); restore time + install < install-from-scratch on p50; untrusted events cannot save caches trusted jobs restore.
 
@@ -58,9 +58,9 @@ Each module: when it applies, the experiment, the counterexamples that make it a
 
 **Experiment.** Draw the `needs` DAG; split lint, typecheck, unit, build into sibling jobs; keep one aggregate job (`needs: [all]`, `if: always()`, fail when any need is not `success`) as the single required check.
 
-**Counterexamples.** Each job repeats a 2-minute install, so 4 parallel jobs cost 8 runner-minutes for a 1-minute gain; concurrency limit on the plan turns parallel jobs into queued jobs; hidden ordering (build artifacts consumed by tests).
+**Counterexamples.** Each job repeats a 2-minute install, so 4 parallel jobs cost 8 runner-minutes for a 1-minute gain; concurrency limit on the plan turns parallel jobs into queued jobs; hidden ordering (build artifacts consumed by tests). **Build once, fan out** (one upstream build job, consumers download its artifact) cuts runner-minutes but adds a serial stage: Δ wall-clock = new serial stage + artifact upload/download on the slowest consumer − work removed from the pole. If that is above zero, it is a bill-only change, never a speed recommendation; a warm cache in each consumer is the alternative. Steps inside one job can run concurrently only when they share no cache, artifact, output directory, `GITHUB_ENV` write or started server.
 
-**Gate.** Critical path shorter at p50 and p95; aggregate check fails when any child fails, is cancelled, or is skipped unexpectedly (test it by forcing a failure in each child); runner-minutes delta reported.
+**Gate.** Critical path shorter at p50 and p95 (stacked, not summed: [sizing](04-measurement-benchmarking.md#sizing-and-combining-savings)); aggregate check fails when any child fails, is cancelled, or is skipped unexpectedly (test it by forcing a failure in each child); runner-minutes delta reported.
 
 ## 6. Affected tasks
 

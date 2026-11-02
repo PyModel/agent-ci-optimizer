@@ -11,7 +11,7 @@ A faster pipeline that can go green on broken code is a regression. Check every 
 | Default branch | `push` to main, `schedule` | as needed | as needed | writes the shared cache |
 | Privileged | release, deploy, `pull_request_target`, `workflow_run` | yes | yes | never restores caches untrusted code wrote |
 
-Rules: set `permissions:` at workflow top to `contents: read` and widen per job; keep deploy and release in separate jobs (or workflows) gated by environment protection.
+Rules: set `permissions:` at workflow top to `contents: read` and widen per job (OIDC `id-token: write` only on the job that exchanges the token, never workflow-wide); keep deploy and release in separate jobs (or workflows) gated by environment protection.
 
 ## Privileged triggers
 
@@ -54,3 +54,16 @@ A cache key an untrusted run can write and a trusted run can restore is an injec
 ## Supply chain
 
 Pin third-party actions to a full commit SHA with a version comment; let Dependabot/Renovate bump them. Pin container images by digest in privileged jobs. A new linter, runner vendor, or hook manager is a new dependency: name its maintainer, license, and install scripts in the PR.
+
+## Before publishing a report
+
+Review the findings as if each one were wrong, then keep only what survives:
+
+1. Re-derive every number from `metrics.json` or the raw data with exact job names; numbers in prose match the tables.
+2. Each quoted "before" line exists in the real file, composite actions and reusable workflows included.
+3. Evidence shows the aggregate (p50/p95 with n), not one cherry-picked run.
+4. The saving is causal and possible: no per-change wall-clock gain above the floor or above the whole path ([sizing](04-measurement-benchmarking.md#sizing-and-combining-savings)).
+5. The remedy is a change to CI config or tooling someone can make, not "fix your code".
+6. Intent: `git log --follow -p` and the PR that added the line. A recent, deliberate choice the fix contradicts is a policy change for the owner, not a quick win.
+
+When a second, independent reviewer is available (a fresh agent given the repo and the report, not your conclusions), cut any finding only one of you would defend.

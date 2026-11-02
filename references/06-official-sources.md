@@ -9,7 +9,7 @@ Accessed 2026-11-01. Versions move: re-open the page before quoting a version, f
 | Oxlint | ~870 rules; plugin coverage; type-aware linting; JS plugins alpha; `@oxlint/migrate`; `eslint-plugin-oxlint` | https://oxc.rs/docs/guide/usage/linter |
 | Vitest 5 | `isolate` default true; `pool` default `forks`; `maxWorkers`; `--shard` by file with blob reporter; `sequence.shuffle` | https://vitest.dev/config/isolate · https://vitest.dev/config/pool · https://vitest.dev/config/maxworkers · https://vitest.dev/guide/cli |
 | Vitest 4 migration | `poolOptions` removed; `maxThreads`/`maxForks` → `maxWorkers` | https://v4.vitest.dev/guide/migration |
-| actions/checkout v7 | `fetch-depth` default 1; `filter` input (partial clone, overrides sparse-checkout); `allow-unsafe-pr-checkout` | https://github.com/actions/checkout |
+| actions/checkout v7 | `fetch-depth` default 1; `filter` input (partial clone, overrides sparse-checkout); `allow-unsafe-pr-checkout`; `submodules` (default false) and `lfs` inputs (re-checked 2026-11-02) | https://github.com/actions/checkout |
 | Required checks | skipped workflow → Pending, blocks merge; skipped job → Success | https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/troubleshooting-required-status-checks · https://docs.github.com/en/pull-requests/reference/status-checks |
 | `pull_request_target` | base-repo token and secrets; pwn-request risk | https://docs.github.com/en/actions/reference/security/securely-using-pull_request_target |
 | Dependency caching | branch/default-branch restore scope; PR caches scoped to merge ref | https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching |
@@ -21,7 +21,10 @@ Accessed 2026-11-01. Versions move: re-open the page before quoting a version, f
 | Larger runners | Team / Enterprise Cloud only; per-minute billing | https://docs.github.com/en/actions/concepts/runners/larger-runners |
 | Runner pricing | per-minute rates by label | https://docs.github.com/en/billing/reference/actions-runner-pricing |
 | Merge queue | workflows need `merge_group` trigger | https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue |
+| PR activity types (accessed 2026-11-02) | `pull_request` runs by default on `opened`, `synchronize`, `reopened`; `edited`, `labeled`, `assigned`, `review_requested` etc. are opt-in types | https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows |
+| Matrix strategy (accessed 2026-11-02) | `strategy.fail-fast` defaults to true and cancels in-progress and queued matrix jobs when one fails; without `max-parallel`, GitHub runs as many matrix jobs in parallel as runners allow | https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax |
+| OIDC permission (accessed 2026-11-02) | `id-token: write` is required to request the JWT and can be set on a single job | https://docs.github.com/en/actions/reference/security/oidc |
 
 ## Not confirmed on 2026-11-01
 
-Do not assert these without a fresh source: Blacksmith per-minute price; whether TS 7 `tsc` has declaration-emit gaps; Nx merge-base semantics in detail.
+Do not assert these without a fresh source: Blacksmith per-minute price; whether TS 7 `tsc` has declaration-emit gaps; Nx merge-base semantics in detail; the exact `github.event.pull_request.draft` payload description (field name used in recipes, page not re-read on 2026-11-02).

@@ -64,6 +64,46 @@ class DiscoverRepoTest(unittest.TestCase):
             for key in ("pull_request_target", "or_true", "unpinned_action"):
                 self.assertIn(key, wf)
             self.assertEqual(wf["secret_names"], ["NPM_TOKEN"])
+            self.assertEqual(out["hints"]["pinned_action_ratio"], {"pinned": 0, "total": 1, "value": 0.0})
+
+    def test_new_workflow_flags(self):
+        sha = "a" * 40
+        wf = (
+            "on:\n  push:\n    paths: ['src/**']\n  pull_request:\n    types: [opened, edited, synchronize]\n"
+            "  schedule:\n    - cron: '*/5 * * * *'\n"
+            "concurrency:\n  group: x\n  cancel-in-progress: false\n"
+            "jobs:\n  t:\n    if: github.event.pull_request.draft == false\n    permissions:\n      id-token: write\n"
+            "    services:\n      db:\n        image: postgres:latest\n"
+            "    strategy:\n      max-parallel: 1\n      fail-fast: false\n    steps:\n"
+            f"      - uses: actions/checkout@{sha} # v7\n        with:\n          submodules: recursive\n"
+            "      - uses: actions/setup-node@v7\n      - run: sleep 30\n      - run: docker build --no-cache .\n"
+        )
+        clean = "on:\n  push:\n    branches: [main]\n  pull_request:\njobs: {}\n"
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            write(root, ".github/workflows/a.yml", wf)
+            write(root, ".github/workflows/b.yml", clean)
+            out = discover_repo.discover(root)
+        a = out["github_workflows"][".github/workflows/a.yml"]
+        for key in ("push_and_pr_unfiltered", "pr_types", "cron", "cancel_in_progress_false", "draft_gate",
+                    "id_token_write", "image_latest", "max_parallel", "fail_fast", "submodules_or_lfs",
+                    "sleep", "no_cache_or_clean"):
+            self.assertIn(key, a, key)
+        self.assertEqual(a["push_and_pr_unfiltered"][0]["line"], 2)  # paths alone does not stop the double run
+        self.assertEqual(a["image_latest"][0]["value"], "postgres:latest")
+        self.assertEqual(a["sleep"][0]["value"], "30")
+        self.assertEqual(a["action_pins"], {"pinned": 1, "total": 2})
+        self.assertEqual(out["github_workflows"][".github/workflows/b.yml"], {})
+        self.assertEqual(out["hints"]["pinned_action_ratio"]["value"], 0.5)
+
+    def test_unfiltered_push_shapes(self):
+        f = discover_repo.unfiltered_push
+        self.assertEqual(f(["on: [push, pull_request]"]), 1)
+        self.assertEqual(f(["on:", "  pull_request:", "  push:"]), 3)
+        self.assertIsNone(f(["on:", "  push:", "    tags: ['v*']", "  pull_request:"]))
+        self.assertIsNone(f(["on: [push, pull_request_target]"]))
+        self.assertIsNone(f(["# add pull_request later", "on:", "  push:"]))
+        self.assertIsNone(f(["on:", "  pull_request:", "jobs:", "  b:", "    steps:", "      - with:", "          push: true"]))
 
 
 def fake_gh(routes: dict):
@@ -162,6 +202,50 @@ class AnalyzeGhTest(unittest.TestCase):
         self.assertEqual(m["flaky_sha_rate"]["num"], 1)
         self.assertEqual(m["cache_hit_rate"], "unknown")
         self.assertIsInstance(m["push_to_green_s"], dict)
+
+    def test_floor_gap_required_tags_tail_and_first_pass(self):
+        T = "2026-10-01T00:{:02d}:00Z".format
+        runs = [{"id": i, "name": "CI", "event": "pull_request", "head_sha": str(i), "workflow_id": 1,
+                 "conclusion": c, "created_at": T(i * 10), "updated_at": T(i * 10 + 9), "run_attempt": a}
+                for i, c, a in ((1, "success", 1), (2, "success", 2), (3, "failure", 1), (4, "success", 1))]
+        jobs = {r["id"]: [job(r["id"], n, r["created_at"], r["created_at"], T(r["id"] * 10 + m), attempt=r["run_attempt"])
+                          for n, m in (("test", 8), ("lint", 5))] for r in runs}
+        jobs[4][0]["completed_at"] = "2026-10-01T01:40:00Z"  # one 60-min outlier
+        g = analyze_gh.analyze(runs, jobs, {}, {"test"})["workflows"]["CI [pull_request]"]
+        self.assertEqual(g["last_finishing_job"], {"test": {"runs": 4, "required": True}})
+        self.assertEqual(g["gap_to_runner_up_s"]["n"], 3)  # the failed run is not a floor sample
+        self.assertEqual(g["gap_to_runner_up_s"]["p50"], 180.0)  # 8 min - 5 min
+        self.assertTrue(analyze_gh.dist([1, 1, 1, 10])["heavy_tail"])
+        self.assertNotIn("heavy_tail", analyze_gh.dist([1, 1, 1, 2]))
+        m = analyze_gh.analyze(runs, jobs, {})
+        fp = m["first_pass_failure_rate"]
+        self.assertEqual((fp["num"], fp["den"], fp["time_to_green_multiplier"]), (2, 4, 2.0))
+        self.assertEqual(m["required_checks"], "unknown")
+        self.assertEqual(m["workflows"]["CI [pull_request]"]["last_finishing_job"]["test"]["required"], "unknown")
+
+    def test_required_contexts_sources(self):
+        rc = analyze_gh.required_contexts
+        rules = [{"type": "required_status_checks", "parameters": {"required_status_checks": [{"context": "ci"}]}}]
+        self.assertEqual(rc({"classic_protection": {"contexts": ["a"], "checks": [{"context": "b"}]}, "rulesets": rules}),
+                         {"a", "b", "ci"})
+        self.assertEqual(rc({"classic_protection": {"unavailable": "HTTP 404"}, "rulesets": []}), set())
+        self.assertIsNone(rc({"classic_protection": {"unavailable": "HTTP 403"}, "rulesets": rules}))
+        self.assertIsNone(rc({"classic_protection": {"unavailable": "HTTP 404"}, "rulesets": {"unavailable": "x"}}))
+
+    def test_since_filters_runs_and_rejects_naive_time(self):
+        with tempfile.TemporaryDirectory() as d:
+            raw = Path(d) / "raw"
+            (raw / "jobs").mkdir(parents=True)
+            (raw / "runs.json").write_text(json.dumps([
+                {"id": 1, "name": "CI", "event": "push", "conclusion": "success", "created_at": "2026-09-01T00:00:00Z"},
+                {"id": 2, "name": "CI", "event": "push", "conclusion": "success", "created_at": "2026-10-02T00:00:00Z"}]))
+            out = Path(d) / "m.json"
+            with redirect_stdout(io.StringIO()):
+                self.assertEqual(analyze_gh.main(["--input", d, "--output", str(out), "--since", "2026-10-01T00:00:00Z"]), 0)
+            m = json.loads(out.read_text())
+            self.assertEqual((m["sample"]["runs"], m["since_filter"]), (1, "2026-10-01T00:00:00Z"))
+            with self.assertRaises(SystemExit), mock.patch("sys.stderr", io.StringIO()):
+                analyze_gh.main(["--input", d, "--output", str(out), "--since", "2026-10-01"])
 
     def test_empty_is_unknown_not_zero(self):
         m = analyze_gh.analyze([], {}, {})

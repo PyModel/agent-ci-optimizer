@@ -3,10 +3,11 @@
 
 Every metric carries its definition and sample size. A metric with no data is
 the string "unknown", never 0. Workflow-level numbers are approximations of
-required-check time: this script does not know which checks branch rules
-require or the YAML `needs` DAG (see limitations in the output).
+required-check time: jobs are tagged with whether branch rules require them
+(from raw/required_checks.json), but the YAML `needs` DAG is not joined
+(see limitations in the output).
 
-Usage: python3 scripts/analyze_gh.py --input .ci-audit --output .ci-audit/metrics.json
+Usage: python3 scripts/analyze_gh.py --input .ci-audit --output .ci-audit/metrics.json [--since ISO8601]
 """
 from __future__ import annotations
 
@@ -22,6 +23,7 @@ from pathlib import Path
 
 UNKNOWN = "unknown"
 LOW_SAMPLE = 10
+HEAVY_TAIL = 3.0  # p95/p50 above this: size by p95, explain the tail
 GREEN = {"success", "skipped", "neutral"}
 SETUP_STEP = re.compile(
     r"^(set up job|complete job|post |run actions/checkout|checkout|run actions/setup-|setup |"
@@ -41,9 +43,13 @@ DEFINITIONS = {
     "rerun_rate": "share of runs with run_attempt > 1.",
     "shard_skew": "per run and matrix family: slowest shard duration / median shard duration.",
     "billable_minutes_by_label": "sum over jobs of ceil(duration/60), grouped by runner label set. Not a bill: no price, no minute multipliers.",
+    "last_finishing_job": "per workflow: runs in which this job completed last (latest attempt, skipped jobs excluded); required = its name is a required status check context (unknown when branch rules could not be read).",
+    "gap_to_runner_up_s": "per successful run: last job completed_at - second-to-last job completed_at. The most wall-clock a fix to the last job alone can save before another job gates.",
+    "first_pass_failure_rate": "share of success/failure runs that failed or needed run_attempt > 1. time_to_green_multiplier = 1 / (1 - rate).",
+    "heavy_tail": "set on a distribution when p95 / p50 > 3.",
 }
 LIMITATIONS = [
-    "Required checks and the `needs` DAG are not joined; workflow time approximates, not equals, merge-blocking time.",
+    "The `needs` DAG is not joined, and required tagging matches job names to check contexts exactly; workflow time approximates, not equals, merge-blocking time.",
     "Cache hit/miss and test counts need job logs; reported as unknown.",
     "Cost needs runner pricing and plan details; only billable-minute counts are given.",
     "Runs are grouped by workflow name + event; renamed workflows split into separate groups.",
@@ -78,8 +84,11 @@ def dist(values: list[float]) -> dict | str:
     vals = [v for v in values if v is not None]
     if not vals:
         return UNKNOWN
-    out = {"n": len(vals), "p50": round(pct(vals, 50), 3), "p95": round(pct(vals, 95), 3),
-           "max": round(max(vals), 3)}
+    p50, p95 = pct(vals, 50), pct(vals, 95)
+    out = {"n": len(vals), "p50": round(p50, 3), "p95": round(p95, 3),
+           "mean": round(statistics.fmean(vals), 3), "max": round(max(vals), 3)}
+    if p50 > 0 and p95 / p50 > HEAVY_TAIL:
+        out["heavy_tail"] = True
     if len(vals) < LOW_SAMPLE:
         out["low_sample"] = True
     return out
@@ -94,7 +103,7 @@ def ratio(num: int, den: int) -> dict | str:
     return out
 
 
-def load(input_dir: Path) -> tuple[list[dict], dict[int, list[dict]], dict]:
+def load(input_dir: Path) -> tuple[list[dict], dict[int, list[dict]], dict, set[str] | None]:
     raw = input_dir / "raw"
     runs_path = raw / "runs.json"
     if not runs_path.is_file():
@@ -106,7 +115,34 @@ def load(input_dir: Path) -> tuple[list[dict], dict[int, list[dict]], dict]:
             jobs[int(p.stem)] = json.loads(p.read_text())
     meta_path = raw / "collect_meta.json"
     meta = json.loads(meta_path.read_text()) if meta_path.is_file() else {}
-    return runs, jobs, meta
+    req_path = raw / "required_checks.json"
+    required = required_contexts(json.loads(req_path.read_text())) if req_path.is_file() else None
+    return runs, jobs, meta, required
+
+
+def required_contexts(required: dict) -> set[str] | None:
+    """Required status-check contexts from collect_gh.py's required_checks.json.
+    None when either source could not be read (403 etc.); a 404 on classic
+    protection means none configured."""
+    names: set[str] = set()
+    classic = required.get("classic_protection")
+    if not isinstance(classic, dict):
+        return None
+    if "unavailable" in classic:
+        if "404" not in classic["unavailable"]:
+            return None
+    else:
+        names.update(c for c in classic.get("contexts") or [] if isinstance(c, str))
+        names.update(c["context"] for c in classic.get("checks") or [] if isinstance(c, dict) and c.get("context"))
+    rules = required.get("rulesets")
+    if not isinstance(rules, list):
+        return None
+    for rule in rules:
+        params = rule.get("parameters") if isinstance(rule, dict) else None
+        for c in (params or {}).get("required_status_checks") or []:
+            if isinstance(c, dict) and c.get("context"):
+                names.add(c["context"])
+    return names
 
 
 def latest_attempt(run: dict, jobs: list[dict]) -> list[dict]:
@@ -119,17 +155,17 @@ def run_end(run: dict, jobs: list[dict]) -> str | None:
     return max(ends, key=lambda s: ts(s)) if ends else run.get("updated_at")
 
 
-def analyze_group(runs: list[dict], jobs_by_run: dict[int, list[dict]]) -> dict:
+def analyze_group(runs: list[dict], jobs_by_run: dict[int, list[dict]], required: set[str] | None = None) -> dict:
     conclusions = Counter(r.get("conclusion") or "none" for r in runs)
     green_runs = [r for r in runs if r.get("conclusion") == "success"]
     wall = [secs(r.get("created_at"), run_end(r, jobs_by_run.get(r["id"], []))) for r in green_runs]
-    queue, setup_share, skew = [], [], []
+    queue, setup_share, skew, gaps = [], [], [], []
     job_durations: dict[str, list[float]] = defaultdict(list)
     slowest = Counter()
     for r in runs:
         jobs = latest_attempt(r, jobs_by_run.get(r["id"], []))
         families: dict[str, list[float]] = defaultdict(list)
-        last_name, last_end = None, None
+        ends: list[tuple[datetime, str]] = []
         for j in jobs:
             queue.append(secs(j.get("created_at"), j.get("started_at")))
             if j.get("conclusion") == "skipped":
@@ -143,15 +179,16 @@ def analyze_group(runs: list[dict], jobs_by_run: dict[int, list[dict]]) -> dict:
             m = MATRIX.match(name)
             if m:
                 families[m.group(1)].append(d)
-            end = ts(j.get("completed_at"))
-            if last_end is None or end > last_end:
-                last_name, last_end = name, end
+            ends.append((ts(j.get("completed_at")), name))
             steps = [(s.get("name", ""), secs(s.get("started_at"), s.get("completed_at"))) for s in j.get("steps") or []]
             total = sum(x for _, x in steps if x)
             if total > 0:
                 setup_share.append(sum(x for n, x in steps if x and SETUP_STEP.match(n)) / total)
-        if last_name:
-            slowest[last_name] += 1
+        ends.sort()
+        if ends:
+            slowest[ends[-1][1]] += 1
+        if len(ends) >= 2 and r.get("conclusion") == "success":  # a failed run ends at the failure, not the floor
+            gaps.append((ends[-1][0] - ends[-2][0]).total_seconds())
         for durations in families.values():
             if len(durations) >= 2 and statistics.median(durations) > 0:
                 skew.append(max(durations) / statistics.median(durations))
@@ -163,7 +200,11 @@ def analyze_group(runs: list[dict], jobs_by_run: dict[int, list[dict]]) -> dict:
         "setup_share": dist(setup_share),
         "shard_skew": dist(skew),
         "rerun_rate": ratio(sum(1 for r in runs if (r.get("run_attempt") or 1) > 1), len(runs)),
-        "last_finishing_job": dict(slowest.most_common(5)) or UNKNOWN,
+        "last_finishing_job": {
+            n: {"runs": c, "required": UNKNOWN if required is None else n in required}
+            for n, c in slowest.most_common(5)
+        } or UNKNOWN,
+        "gap_to_runner_up_s": dist(gaps),
         "job_duration_s": {n: dist(v) for n, v in sorted(job_durations.items(), key=lambda kv: -pct(kv[1], 50))[:15]},
         "jobs_missing_for_runs": sum(1 for r in runs if r["id"] not in jobs_by_run),
     }
@@ -188,6 +229,15 @@ def push_to_green(runs: list[dict], jobs_by_run: dict[int, list[dict]]) -> dict 
     return dist(out)
 
 
+def first_pass(runs: list[dict]) -> dict | str:
+    done = [r for r in runs if r.get("conclusion") in {"success", "failure"}]
+    failed = sum(1 for r in done if r.get("conclusion") == "failure" or (r.get("run_attempt") or 1) > 1)
+    out = ratio(failed, len(done))
+    if isinstance(out, dict):
+        out["time_to_green_multiplier"] = round(1 / (1 - out["value"]), 3) if out["value"] < 1 else UNKNOWN
+    return out
+
+
 def flaky(runs: list[dict]) -> dict | str:
     pairs: dict[tuple, set] = defaultdict(set)
     counts: Counter = Counter()
@@ -210,7 +260,8 @@ def billable(jobs_by_run: dict[int, list[dict]]) -> dict | str:
     return dict(minutes) or UNKNOWN
 
 
-def analyze(runs: list[dict], jobs_by_run: dict[int, list[dict]], meta: dict) -> dict:
+def analyze(runs: list[dict], jobs_by_run: dict[int, list[dict]], meta: dict,
+            required: set[str] | None = None) -> dict:
     groups: dict[str, list[dict]] = defaultdict(list)
     for r in runs:
         groups[f"{r.get('name', '?')} [{r.get('event', '?')}]"].append(r)
@@ -221,14 +272,17 @@ def analyze(runs: list[dict], jobs_by_run: dict[int, list[dict]], meta: dict) ->
         "repo": meta.get("repo", UNKNOWN),
         "collected_at": meta.get("collected_at", UNKNOWN),
         "window": {"from": created[0], "to": created[-1]} if created else UNKNOWN,
+        "since_filter": meta.get("since"),
         "sample": {"runs": len(runs), "runs_with_jobs": sum(1 for r in runs if r["id"] in jobs_by_run),
                    "collect_errors": len(meta.get("errors", []))},
         "push_to_green_s": push_to_green(runs, jobs_by_run),
         "flaky_sha_rate": flaky(runs),
+        "first_pass_failure_rate": first_pass(runs),
+        "required_checks": sorted(required) if required is not None else UNKNOWN,
         "billable_minutes_by_label": billable(jobs_by_run),
         "cache_hit_rate": UNKNOWN,
         "cost_per_merge": UNKNOWN,
-        "workflows": {k: analyze_group(v, jobs_by_run) for k, v in sorted(groups.items())},
+        "workflows": {k: analyze_group(v, jobs_by_run, required) for k, v in sorted(groups.items())},
         "definitions": DEFINITIONS,
         "limitations": LIMITATIONS,
     }
@@ -248,13 +302,20 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Compute CI baseline metrics from collect_gh.py output.")
     ap.add_argument("--input", type=Path, default=Path(".ci-audit"), help="collect_gh.py --out directory")
     ap.add_argument("--output", type=Path, default=Path(".ci-audit/metrics.json"))
+    ap.add_argument("--since", help="only runs created at or after this ISO-8601 time (e.g. the last workflow-config change)")
     args = ap.parse_args(argv)
+    since = ts(args.since) if args.since else None
+    if args.since and (since is None or since.tzinfo is None):
+        ap.error("--since must be ISO-8601 with a timezone, e.g. 2026-10-01T00:00:00Z")
     try:
-        runs, jobs, meta = load(args.input)
+        runs, jobs, meta, required = load(args.input)
     except (FileNotFoundError, json.JSONDecodeError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
-    metrics = analyze(runs, jobs, meta)
+    if since:
+        runs = [r for r in runs if (created := ts(r.get("created_at"))) and created >= since]
+        meta = {**meta, "since": args.since}
+    metrics = analyze(runs, jobs, meta, required)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(metrics, indent=2))
     print("\n".join(summary_lines(metrics)))

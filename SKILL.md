@@ -36,18 +36,20 @@ Activate modules only for the detected stack: JS/TS modules stay out of non-JS r
 
 Script paths below are relative to this skill's directory; from the target repo, call them by absolute path. Write evidence to `REPO/.ci-audit/` (`mkdir -p` it first) and add `.ci-audit/` to `REPO/.git/info/exclude` so it is never committed. All scripts are Python 3.10+ stdlib; read each script's `--help` before running it.
 
-1. Read repo policy (`AGENTS.md`, `CLAUDE.md`, CONTRIBUTING, CODEOWNERS), CI config, deployment and protected-branch requirements. Record conflicts with this skill; the stricter safety rule wins.
+1. Read repo policy (`AGENTS.md`, `CLAUDE.md`, CONTRIBUTING, CODEOWNERS), CI config, deployment and protected-branch requirements. Record conflicts with this skill; the stricter safety rule wins. Before proposing a change to a line, read its history (`git log --follow -p`, the PR that added it): a recent deliberate choice is the owner's policy, not a bug.
 2. Inventory: `python3 scripts/discover_repo.py --root REPO > REPO/.ci-audit/discovery.json`. It opens only `package.json` (script and dependency names) and GitHub workflow files (risk-pattern lines, secret names); everything else, `.env` included, is seen by name alone. Verify each finding by reading the file. Map findings to modules with the [discovery matrix](references/01-discovery-matrix.md).
 3. Identify CI provider(s), runner trust domains, workflows and job `needs`, languages, lockfiles, monorepo graph, test runners, coverage gates, deployment paths, and secret **names and permission scopes only**.
 4. Identify permission boundaries: fork PR vs trusted branch vs merge queue vs release. GitHub collection needs authenticated `gh` with read access to Actions; benchmarking never justifies write scope.
 5. Collect up to 150 recent completed runs (failed runs included, kept distinguishable):
    `python3 scripts/collect_gh.py --repo OWNER/REPO --limit 150 --out REPO/.ci-audit`
    Add `--event pull_request` or `--event push --branch main` to separate loops. Exit 3 means some runs lack job data: metrics are partial, say so. Other providers: normalize to the [raw schema](references/04-measurement-benchmarking.md#raw-schema).
-6. Analyze: `python3 scripts/analyze_gh.py --input REPO/.ci-audit --output REPO/.ci-audit/metrics.json`. It reports push→green, run wall time, job queue, setup share, shard skew, reruns, flaky SHAs, last-finishing job, and billable minutes per runner label. It does not know required checks or the `needs` DAG; join `raw/required_checks.json` and the YAML yourself.
+6. Analyze: `python3 scripts/analyze_gh.py --input REPO/.ci-audit --output REPO/.ci-audit/metrics.json`. It reports push→green, run wall time, job queue, setup share, shard skew, reruns, flaky SHAs, first-pass failure rate, last-finishing job (tagged `required`), the gap to the runner-up job, heavy tails, and billable minutes per runner label. It does not know the `needs` DAG; join the YAML yourself. If a workflow file changed inside the window, re-run with `--since <commit date>` so one config era is measured.
 7. Establish p50/p95 for push→green, workflow wall, queue, setup, lint, typecheck, tests, cache hit/miss, flaky retries, runner spend, cost per merge, and tail outliers. Missing or inapplicable metrics are **unknown**, never zero.
 8. Read the [safety policy](references/03-security-correctness.md). Build the `needs` DAG and name the slowest required path.
 
-**Evidence rule:** every number in an audit carries source, time window, sample size, metric definition and limitations. Compare the same workflow, event and runner class; keep fork PRs apart from privileged release builds.
+**Evidence rule:** every number in an audit carries source, time window, sample size, metric definition and limitations. Compare the same workflow, event and runner class; keep fork PRs apart from privileged release builds. A YAML pattern match is a lead, not a finding: a finding needs positive evidence from this repo's runs ([evidence tiers](references/04-measurement-benchmarking.md#evidence-tiers)).
+
+**Two axes:** size every candidate on Δ wall-clock and Δ runner-minutes separately. A job that finishes before the gating job saves no wait, however much faster it gets; wall-clock savings combine through a stacked model, never a sum ([sizing](references/04-measurement-benchmarking.md#sizing-and-combining-savings)).
 
 ## Seven mandatory optimization modules
 
@@ -80,9 +82,9 @@ Script paths below are relative to this skill's directory; from the target repo,
 ### A. Diagnose and prioritize (no modifications)
 
 1. Reconstruct the DAG from provider config; separate queue, setup, steps and critical path. GitHub's jobs API gives timings; the `needs` edges come from YAML.
-2. Fill the seven-module table: `applicable`, `observed bottleneck`, `expected critical-path saving`, `confidence`, `correctness/security risk`, `effort`, `cost delta`, `next proof`.
+2. Fill the seven-module table: `applicable`, `observed bottleneck`, `Δ wall-clock` (on path or below floor), `Δ runner-minutes`, `evidence tier`, `correctness/security risk`, `effort`, `cost delta`, `next proof`.
 3. Order by **risk-adjusted saving on the required path**: reversible setup/cache fixes before runner or provider changes. [Measurement guide](references/04-measurement-benchmarking.md).
-4. Deliver the `OBSERVE` report and proposed sequence. Material or paid changes wait for approval.
+4. Run the [pre-publish review](references/03-security-correctness.md#before-publishing-a-report) on every finding, then deliver the `OBSERVE` report and proposed sequence. Material or paid changes wait for approval.
 
 ### B. Benchmark one change
 
@@ -99,11 +101,11 @@ Script paths below are relative to this skill's directory; from the target repo,
 - **One independently reversible PR per intervention.** Runner migration, test selection, test isolation and permission changes each ship alone. Use the [optimization PR template](templates/optimization-pr.md); config starting points are in [recipes](references/07-config-recipes.md).
 - Keep existing check names and required gates. Run full relevant verification on the change, and prove each changed gate goes red on a probe commit.
 - Workflow permissions or cache trust boundaries changed → security-owner review. Cost, vendor or trust jurisdiction changed → project-owner review. Coverage, isolation or affected selection changed → test-owner review plus mutation checks.
-- Success is claimed from post-merge CI telemetry, not local benchmarks.
+- Success is claimed from post-merge CI telemetry, not local benchmarks: reruns, workload state and gate migration per [CI-side verification](references/04-measurement-benchmarking.md#ci-side-verification).
 
 ### D. Monitor, adapt, roll back
 
-Track p50/p95 push→green, queue/setup breakdown, p95 critical path, cache efficiency, reruns, skipped-vs-full selection, cost per merged PR, false greens, escaped defects and release provenance. Re-assess after each change: bottlenecks move. Investigation triggers (not universal gates): queue p95 >60 s, setup >25% of the critical job, slowest shard >1.5× median, flake >5%, p95 >2× target. Rollback triggers: [measurement guide](references/04-measurement-benchmarking.md#monitoring-and-rollback).
+Track p50/p95 push→green, queue/setup breakdown, p95 critical path, cache efficiency, reruns, skipped-vs-full selection, cost per merged PR, false greens, escaped defects and release provenance. Re-assess after each change: bottlenecks move. When another job becomes the gate, report the new gate, not the old job's gain as wait removed. Investigation triggers (not universal gates): queue p95 >60 s, setup >25% of the critical job, slowest shard >1.5× median, flake >5%, p95 >2× target. Rollback triggers: [measurement guide](references/04-measurement-benchmarking.md#monitoring-and-rollback).
 
 ## Mandatory output contract
 
@@ -131,8 +133,8 @@ Stop and ask before work that changes paid runners or providers, secrets, releas
 
 - [Discovery matrix](references/01-discovery-matrix.md) — stack → modules, CI-provider adapters, workflow risk flags.
 - [Seven-module playbook](references/02-optimization-playbook.md) — experiments, counterexamples, gates, verified tool facts.
-- [Security and correctness](references/03-security-correctness.md) — trust zones, skipped-check semantics, failure testing.
-- [Measurement and benchmarking](references/04-measurement-benchmarking.md) — metric definitions, experiments, rollback, raw schema.
+- [Security and correctness](references/03-security-correctness.md) — trust zones, skipped-check semantics, failure testing, pre-publish review.
+- [Measurement and benchmarking](references/04-measurement-benchmarking.md) — metric definitions, two-axis sizing, evidence tiers, experiments, CI-side verification, rollback, raw schema.
 - [Worked examples](references/05-worked-examples.md) — monorepo, small library, polyglot, agent-heavy repo.
 - [Official sources](references/06-official-sources.md) — dated URLs, plus claims not yet confirmed.
 - [Config recipes](references/07-config-recipes.md) — aggregate check, caches, blobless clone, Oxlint, typecheck, Vitest projects, hooks.

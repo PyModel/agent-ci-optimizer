@@ -40,6 +40,18 @@ Normalize other providers into the `runs.json` / `jobs/<id>.json` shape in [meas
 | no `concurrency` | superseded pushes keep burning runners | `cancel-in-progress` for PR branches, never for default/release |
 | no `timeout` | stuck jobs hold the queue for 6h default | add `timeout-minutes` from p99 × 2 |
 | `secret_names` | trust boundary inventory; names only | never print values |
+| `push_and_pr_unfiltered` | `push` with no branch/tag filter plus `pull_request`: every PR commit runs twice (`paths` alone does not stop it) | restrict `push` to the default branch; keep tag/release workflows as they are |
+| `pr_types` with `edited`/`labeled`/… | title, label and assignee changes rerun CI on unchanged code | confirm the `types:` sits under `pull_request` (issues/release triggers match too); drop metadata events unless a job reads them |
+| no `draft_gate` on heavy PR jobs | drafts burn the full suite | job-level `if:` on draft state, routed through the aggregate check (a skipped job reports Success) |
+| `cancel_in_progress_false` | superseded runs finish anyway | intentional for default branch/release; otherwise see `concurrency` |
+| `cron` | schedules more often than results are read | match frequency to who reads the result |
+| `max_parallel` `1`, `fail_fast` `false` | serialized matrix; shards keep running after a sure failure | `fail-fast: false` is right for per-OS diagnosis, wasteful on test shards |
+| `submodules_or_lfs` | checkout payload in jobs that may not read it | confirm the job reads those paths before dropping |
+| `sleep` | fixed waits in CI steps; readiness should poll with a bounded timeout | replace with a health check, never an unbounded loop |
+| `image_latest` | floating service/container tag: non-reproducible, cache-hostile | pin a version or digest |
+| `id_token_write` | OIDC token scope | job-level only, never workflow-wide |
+| `no_cache_or_clean` | `--no-cache` / `rm -rf` defeating a cache or a warm runner | check whether the clean is load-bearing (self-hosted runners) |
+| `action_pins`, `hints.pinned_action_ratio` | share of remote `uses:` pinned to a full SHA | aim for all; list the rest |
 
 ## Monorepo graph sources
 

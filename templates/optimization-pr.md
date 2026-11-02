@@ -14,6 +14,8 @@
 | p95 | | | | |
 | runner-minutes / run | | | | |
 
+Workload state: same / reduced / increased / changed / unknown (evidence: <job and test identities>). Gating job before → after: `<a>` → `<b>`. Product code touched: no / yes (then the delta is not CI-only).
+
 Experiment record: `experiments/<id>.json`. Cold and warm cache measured separately: yes / no.
 
 ## Correctness gates
