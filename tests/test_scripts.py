@@ -106,6 +106,18 @@ class CollectGhTest(unittest.TestCase):
         self.assertIn("unavailable", required["classic_protection"])
         self.assertTrue(any("/branches/trunk/protection" in c for c in gh.calls))
 
+    def test_main_exits_3_on_partial_job_data(self):
+        gh = fake_gh({
+            "repos/o/r/actions/runs?": {"workflow_runs": [{"id": 1}, {"id": 2}]},
+            "repos/o/r/actions/runs/2/jobs": collect_gh.GhError("HTTP 500"),
+            "repos/o/r/actions/runs/": {"jobs": []},
+            "repos/o/r/rules/": [],
+            "repos/o/r$": {"default_branch": "main"},
+        })
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(collect_gh, "gh_api", gh), \
+                redirect_stdout(io.StringIO()), mock.patch("sys.stderr", io.StringIO()):
+            self.assertEqual(collect_gh.main(["--repo", "o/r", "--out", d]), 3)
+
     def test_rejects_bad_repo_and_limit(self):
         for argv in (["--repo", "o/r; rm -rf /"], ["--repo", "o/r", "--limit", "0"]):
             with self.assertRaises(SystemExit), redirect_stdout(io.StringIO()):
