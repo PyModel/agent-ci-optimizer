@@ -7,13 +7,22 @@ lint/typecheck, bigger machines and test-worker reuse, caching and blobless clon
 parallel jobs, affected tasks, and pre-push hooks. It starts read-only and treats a
 false green as worse than a slow build.
 
+Before tuning runners, it designs four validation categories from the repository's
+actual commands and policy: **code rules**, **change correctness**, **integrated main**,
+and **release readiness**. It proposes a configurable five-minute PR feedback budget,
+selects tests only with dependency evidence and a FULL fallback, compares merge-queue
+and rolling-main verification, and ties releases to verified commits and artifacts.
+For services it evaluates feature gates and progressive rollouts; for libraries and
+other products it uses the appropriate compatibility, packaging and staging gates.
+Detection produces evidence for agent review, not permission to remove checks.
+
 ## Contents
 
 - [SKILL.md](SKILL.md): the procedure agents follow.
-- [references/](references/): discovery matrix, playbook, safety rules, measurement, examples, dated sources, config recipes.
+- [references/](references/): discovery matrix, playbook, safety rules, measurement, examples, dated sources, config recipes and [four-category validation architecture](references/08-validation-architecture.md).
 - [templates/](templates/): audit report, optimization PR, paste-ready brief for agents without the skill.
 - [scripts/](scripts/): Python 3.10+ stdlib tools.
-  - `discover_repo.py` inventories the stack and never opens secret files.
+  - `discover_repo.py` inventories the stack and validation evidence, uses bounded regular-file reads, and refuses symlinks. Config fields can contain sensitive literals; keep raw evidence local.
   - `collect_gh.py` and `analyze_gh.py` pull read-only GitHub Actions data and produce p50/p95 baselines.
   - `benchmark.py` runs paired timing.
   - `select_affected.py` is a fail-closed affected-test selector.

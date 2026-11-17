@@ -4,7 +4,7 @@ Mode: OBSERVE · Window: <from> → <to> · Sample: <n> runs (<m> with jobs) · 
 
 ## Answer
 
-<One paragraph: the top bottleneck on the required path, the first PR to ship, expected wall-clock and runner-minute saving with confidence, and what is NOT worth changing. If push→green p50 is already a few minutes and nothing gates on a glaring cause, say CI is in good shape first.>
+<One paragraph: the top bottleneck on the required path, the first intervention, expected wall-clock and runner-minute saving with confidence, and no-change findings. Separate actual acceleration from moving work to another category. If CI already meets its chosen objective with sound gates, say so.>
 
 ## Detected stack
 
@@ -17,18 +17,46 @@ Mode: OBSERVE · Window: <from> → <to> · Sample: <n> runs (<m> with jobs) · 
 | Required checks | | `raw/required_checks.json` |
 | Trust boundaries | fork PRs? `pull_request_target`? deploy jobs? | |
 
+## Four validation categories
+
+Use the [validation architecture](../references/08-validation-architecture.md). Classify each command by inspected behavior, not its name; a command may cover more than one category.
+
+| Category | Verified commands / unique failure modes | Trigger and exact revision | Gate / required completion boundary | Coverage / evidence gaps |
+|---|---|---|---|---|
+| 1. Code rules | | | authoritative CI; hooks optional | |
+| 2. Change correctness | relevant tests; FULL conditions | | PR acceptance | |
+| 3. Integrated main | full required suite | queue candidate / immutable main SHA | integration policy; before release eligibility | |
+| 4. Release readiness | artifact, compatibility and rollout checks | immutable artifact digest | release / promotion | |
+
+Main policy: <merge queue/train / explicitly accepted post-push rolling CI / existing full updated-branch policy>. Owner and policy evidence: <link>. Post-push residual risk: <broken-main window, detection/repair ownership, acceptance; or not applicable>.
+
+Rolling controls, if applicable: <candidate/coalescing rule; cancellation; progress guarantee; backpressure; max green age and head distance; failure action>. Unknown/high-risk selection fallback: <FULL before integration>. Each obligation moved later: <old boundary → new boundary, retained gate, approved risk change>.
+
+## PR feedback objective
+
+Chosen objective: <latest-revision p95 / first-push journey p95 / both> ≤ <seconds>. A proposed default of **300 seconds** is a configurable target, never a measured baseline or a timeout. Budget overruns trigger investigation; they never authorize omitted or weakened checks.
+
+| Metric | p50 | p95 | n / window | Start → finish / limitations |
+|---|---|---|---|---|
+| Latest-revision PR feedback | unknown | unknown | | exact push receipt → complete authoritative PR green for that current revision |
+| First-push PR journey | unknown | unknown | | first push in PR window → first complete green for a current revision, including repair/re-push delays |
+| Full integrated validation lag | unknown | unknown | | integration candidate/main event → full green, including queue and retries |
+| Unvalidated / failed / cancelled / superseded | | | | counts, oldest age; keep outside successful-only latency statistics |
+
+Timestamp provenance: <provider push events / explicitly named proxy / unavailable>. Queue, setup and reporting included: <yes / limitations>. Actual observations and target: <separate fields>. Required work that exceeds the budget safely: <keep it; next experiment or revised objective>.
+
 ## Baseline
 
 | Metric | p50 | p95 | n | Definition / limitation |
 |---|---|---|---|---|
-| push→green | | | | approximation, not required-check aware |
+| analyzer push→green proxy | | | | approximation, not a substitute for the PR objective above |
 | slowest workflow wall | | | | |
 | job queue | | | | |
 | setup share | | | | |
 | shard skew | | | | |
 | flake rate | | | | |
-| first-pass failure rate (× time-to-green) | | | | `first_pass_failure_rate` |
-| gap to runner-up job (floor) | | | | `gap_to_runner_up_s`: max saving from fixing the last job alone |
+| first-pass failure rate | | | | verify attempts; separate intentional reruns and repair delay |
+| gap to runner-up job | | | | observational only; dependency-path recomputation determines possible saving |
 | cache hit rate | unknown | | | needs logs |
 | cost per merge | unknown | | | needs pricing |
 
@@ -44,9 +72,26 @@ Critical path: `<job A> → <job B> → <job C>` (see `critical-path.md`). Gatin
 | 4 | Caching / blobless clone | | | | | | | | | |
 | 5 | Parallel jobs | | | | | | | | | |
 | 6 | Affected tasks | | | | | | | | | |
-| 7 | Pre-push hooks | | | | | | | | | |
+| 7 | Local hooks | | | | | | | | | |
 
 Combined wall-clock saving (stacked model, not the sum of rows): <value>; method: <how the path was recomputed>. Runner-minute rows add.
+
+## Evidence identity and release eligibility
+
+- Source identities: <PR/base/candidate/final-main SHAs and verified mapping; rerun if equivalence is unproven>.
+- Workload and policy fingerprint: <commands/test IDs/coverage/graph/workflow/toolchain/build inputs; no secrets>.
+- Artifact: <immutable digest, exact build source, provenance, required evidence links and expiry>.
+- Eligibility: <full-green source + matching policy/artifact + category 4 checks for this stage; preflight before initial exposure, telemetry before further promotion; later main commits inherit no green>.
+- Release plan: <flag states and staged exposure with telemetry thresholds/window/minimum samples/abort owner, or package/staging/consumer compatibility gates>.
+- Migration/data effects: <compatibility, recovery or roll-forward proof; feature flags alone insufficient>.
+- Release/deploy/publish authorization: <existing scope or required separate action; gate success alone grants none>.
+
+## Migration proof
+
+- Selected-versus-FULL shadow comparison on identical representative revisions: <results, test identities, seeded/adversarial failures, unknowns>.
+- Failure probes: <child failure, unexpected skip, cancellation/timeout, missing report/shard, wrong/stale SHA or policy/artifact mismatch all reject green/eligibility>.
+- Classification of the proposal: <equivalent-work acceleration / scheduling redistribution / both, measured separately>.
+- If redistributed: <work retained across PR + main + release; total runner-minutes; PR gain; full-green delay; changed detection window/risk>.
 
 ## Risks found (independent of speed)
 

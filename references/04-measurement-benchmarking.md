@@ -4,16 +4,23 @@
 
 | Metric | Definition | Source |
 |---|---|---|
-| push→green | first run created for a SHA → last required check success for that SHA | `analyze_gh.py` approximates with all workflows of push/PR/merge_group events |
+| push→green | verified event receipt → authoritative required-check completion for the exact current revision | compute from expected checks and raw events/attempts; analyzer output is a diagnostic proxy, not required-check aware |
 | queue | job `started_at − created_at` | jobs API |
 | setup | checkout + toolchain + cache + install steps | step timings, regex-classified |
-| execution | job time minus setup | jobs API |
+| execution | elapsed execution excluding non-overlapping setup coverage; retain summed step work separately | jobs/step interval evidence |
 | critical path | longest chain through the `needs` DAG, using job durations | YAML DAG + job timings (manual join) |
 | flake rate | share of SHAs with both failure and success for the same workflow | runs API; confirm by rerun logs |
 | cache hit rate | restore hits / restore attempts | job logs (`Cache restored from key`) — not in API |
 | cost per merge | runner minutes × price per label ÷ merged PRs in window | billing + plan; `billable_minutes_by_label` is the input |
 
 Unknown stays `unknown`. A report that writes `0` for a missing cache hit rate is wrong.
+
+**Current helper limits:** analyzer output is exploratory. Verify date-filtered run
+and job membership, snapshot freshness, chronological run/attempt identity and
+required-check completeness directly against raw evidence before using a number.
+The current collector/analyzer does not implement the four-category PR feedback
+objective or a release-eligibility ledger. A proxy summary cannot certify a commit,
+artifact or budget; calculate those from verified provider events and evidence.
 
 ## Baseline procedure
 
@@ -29,10 +36,10 @@ Compare like with like: same workflow, event and runner class. Never mix fork PR
 
 Size every candidate on two axes: **Δ wall-clock** (p50 and p95 of push→green or of the required path) and **Δ runner-minutes** (bill and capacity). They are different wins; report both and rank speed work by the first.
 
-- **Floor rule.** Shaving the job that finishes last helps only until the next-latest job becomes the gate: the most a pole-only fix can save is `gap_to_runner_up_s`. A job that already finishes before the pole saves **zero** wall-clock however much faster it gets. Label it runner-minutes only and keep it out of the speed ranking.
+- **Dependency rule.** Recompute the longest required path after each change. A 300-second build feeding a 5-second test becomes a 205-second path when the build is reduced by 100 seconds, even though the build was not last to finish. `gap_to_runner_up_s` is only an observation; it bounds an isolated improvement only for independent competing terminal branches with unchanged scheduling. Aggregate jobs and shared ancestors invalidate a universal finish-gap rule.
 - **Non-additive.** Per-change wall-clock deltas do not add. Two fixes on the same pole overlap; a fix below the floor counts only once the jobs above it also drop. Two near-equal concurrent jobs (300 s and 299 s) each save about nothing alone and 100 s together. Derive the combined figure from a stacked model (re-compute the path with all changes applied), never by summing. Runner-minute deltas do add, since they remove disjoint step time.
 - **Tails.** When p95/p50 > 3 (`heavy_tail` in `metrics.json`) or mean/p50 > 1.5, size by p95 and name the slow run's cause from its log; otherwise say the tail is unexplained. Sum runner-minutes from the mean, not p50.
-- **Reliability multiplies wait.** A first-pass failure rate `f` stretches effective time-to-green by about `1/(1−f)` for the affected share (`first_pass_failure_rate` in `metrics.json`). A flaky required job can be a bigger speed lever than any cache.
+- **Reliability affects wait.** Measure observed attempts and repair/approval delays. The factor `1/(1−f)` is only a hypothetical model for independent, equal-duration retry attempts, not an observed time-to-green estimate. Intentional successful reruns are not failures; failure-to-success without diagnosis is suspected flakiness, not proof.
 - **Never zero after the fix.** A cache restore or artifact download still costs seconds; subtract the measured remainder, not the whole step.
 
 ## Evidence tiers
@@ -63,13 +70,23 @@ Experiment record (`experiments/<id>.json`): id, hypothesis, module, variable, b
 
 For a change measured on real CI rather than with `benchmark.py`:
 
-- Measure push-wide: earliest run `created_at` → last job `completed_at` over every workflow the SHA triggered (what `push_to_green_s` computes). Never sum workflow durations or average per-job ratios.
+- Measure push-wide with a stated cohort: earliest relevant event/run receipt → complete authoritative gate for the exact revision, resolving workflows and attempts from raw evidence. `push_to_green_s` is an approximate exploratory summary; verify it independently and name timestamp proxies. Never sum workflow durations or average per-job ratios.
 - Re-run the candidate SHA at least twice; if two runs differ by more than 20% of their median, go to four. Keep the cold first run in the set and report median and range. One rerun of an unchanged SHA in the same window is the noise control.
 - Disclose the asymmetry: the baseline spans many commits, the candidate is a few reruns of one.
 - **Workload state.** Record one of `same`, `reduced`, `increased`, `changed`, `unknown` (default). Only `same`, backed by matching job and test identities, supports "same work, faster". Equal job counts alone are `unknown`; re-sharding is `changed`, not `reduced`. For `increased`, `changed` or `unknown` the delta is not a lower bound on the benefit. A branch that also changes product code cannot be attributed to CI alone.
 - **Gate migration.** Re-derive which job finishes last after the change. If the gate moved to another job, report the new gate and its time, not the old pole's gain as merge-wait saved.
 
 ## Monitoring and rollback
+
+Use the [PR feedback budget](08-validation-architecture.md#pr-feedback-budget) when
+designing the four-category pipeline. Record target and observations separately;
+the proposed 300-second objective covers latest-revision end-to-end PR feedback,
+not just test execution. Keep first-push journey, completed-run breaches, failed or
+unfinished observations and sample uncertainty visible. A breach opens an agent
+investigation or optimization proposal; no runtime limit may certify unfinished work.
+For redistribution, also track full-suite lag, last eligible green age, queue depth,
+starvation and total runner time across all categories. Preserve accepted protection
+when the budget cannot yet be met.
 
 Re-run `collect_gh.py` + `analyze_gh.py` weekly, or after every merged optimization, and diff `metrics.json`.
 

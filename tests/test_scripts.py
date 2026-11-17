@@ -46,11 +46,11 @@ class DiscoverRepoTest(unittest.TestCase):
                   f"        env:\n          TOKEN: ${{{{ secrets.NPM_TOKEN }}}}\n")
             write(root, ".github/workflows/secrets-scan.yml", "on: push\n")
             opened = []
-            real = Path.read_text
-            def spy(self, *a, **k):
-                opened.append(self.relative_to(root).as_posix())
-                return real(self, *a, **k)
-            with mock.patch.object(Path, "read_text", spy):
+            real = discover_repo.read_text
+            def spy(path, *a, **k):
+                opened.append(path.relative_to(root).as_posix())
+                return real(path, *a, **k)
+            with mock.patch.object(discover_repo, "read_text", spy):
                 out = discover_repo.discover(root)
             self.assertEqual(sorted(opened), [".github/workflows/ci.yml", ".github/workflows/secrets-scan.yml", "package.json"])
             dumped = json.dumps(out)

@@ -2,6 +2,11 @@
 
 Starting points to adapt, not paste. Action majors are the latest releases as of 2026-11-01 (checkout v7, setup-node v7, setup-python v7, cache v6, upload-artifact v7, download-artifact v8, setup-go v7, setup-uv v10, setup-bun v2, nx-set-shas v5, pnpm/action-setup v6). Pin each to a full commit SHA per repo policy: `gh api repos/OWNER/ACTION/commits/vX.Y.Z --jq .sha`. Run `actionlint` on every workflow you write.
 
+First map [the four validation categories](08-validation-architecture.md). The full-test
+example below preserves every check on each event; it is not a universal PR schedule.
+Moving full verification to a queue or rolling-main lane requires the documented policy,
+selector shadow evidence and an aggregate that evaluates the work intended for that event.
+
 ## Parallel jobs + one aggregate required check
 
 Keep the old required check name on the aggregate job (`ci` here) so branch rules keep working.
@@ -46,9 +51,11 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm vitest run --shard=${{ matrix.shard }}/4 --reporter=blob
       - uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
         with:
           name: blob-${{ matrix.shard }}
-          path: .vitest-reports/*
+          path: .vitest/blob/blob-*.json
+          if-no-files-found: error
           include-hidden-files: true
   ci:
     if: always()
@@ -65,6 +72,15 @@ jobs:
 ```
 
 If some needs may be skipped on purpose, list them explicitly in the jq filter (`.key == "e2e" and .value.result == "skipped"`); never accept `skipped` for all. Prove the aggregate goes red by failing each child once ([failure testing](03-security-correctness.md#failure-testing-do-it-dont-argue-it)).
+
+The blob path above is the Vitest 5 default (verified 2026-11-17); honor an explicit
+`outputFile` in the project. Before a sharded coverage/report gate succeeds, require
+every expected shard, merge its evidence and enforce the original coverage threshold.
+Uploading on test failure preserves diagnostics; it never clears that failure.
+
+If heavy jobs skip drafts, include `ready_for_review` alongside `opened`, `synchronize`
+and `reopened`, and test draft→ready without a new commit. Decide draft-state handling
+and intended skips explicitly. See [draft lifecycle sources](06-official-sources.md).
 
 ## Pnpm store / uv / Go caches
 
@@ -109,13 +125,35 @@ Turborepo: `turbo run test --affected` (base override `TURBO_SCM_BASE=${{ github
 ## Reference selector in CI
 
 ```yaml
-- run: |
-    python3 scripts/select_affected.py --map ci-map.json \
-      --base "origin/${{ github.base_ref }}" > selection.json
-    jq -e '.mode == "FULL" or (.targets | length > 0)' selection.json
+- env:
+    BASE_REF: ${{ github.base_ref }}
+  run: |
+    # This example selects only on PR events; other events deliberately run FULL.
+    if [ "$GITHUB_EVENT_NAME" = pull_request ] && [ -n "$BASE_REF" ]; then
+      if ! python3 scripts/select_affected.py --map ci-map.json \
+        --base "origin/$BASE_REF" > selection.json; then
+        printf '%s\n' '{"mode":"FULL","targets":[],"reasons":["selector error"]}' > selection.json
+      fi
+    else
+      printf '%s\n' '{"mode":"FULL","targets":[],"reasons":["full event policy"]}' > selection.json
+    fi
+    # FULL must work even if the map was missing or malformed.
+    if ! jq -e -s 'length == 1 and (.[0] | .mode == "FULL" and .targets == [])' selection.json > /dev/null; then
+      # Declare known_targets before consuming SELECTED in CI.
+      jq -e -s --slurpfile map ci-map.json '
+        length == 1 and ($map | length == 1) and
+        (.[0] | .mode == "SELECTED" and (.targets | type == "array" and length > 0) and
+         (.targets | all(type == "string" and length > 0)) and
+         ($map[0].known_targets | type == "array" and length > 0) and
+         ((.targets - $map[0].known_targets) | length == 0))
+      ' selection.json
+    fi
 ```
 
-`FULL` must run everything. Treat any parse error as FULL.
+`FULL` must execute the full required suite; SELECTED must dispatch every validated
+target. A malformed output fails closed here. A selector error requests FULL, but
+never catches a test failure or makes it green. Resolve and fetch the correct event
+base/head before selection; do not use this PR-base example for merge groups.
 
 ## Oxlint + ESLint fallback
 
