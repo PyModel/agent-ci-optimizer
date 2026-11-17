@@ -2,6 +2,11 @@
 
 Each module: when it applies, the experiment, the counterexamples that make it a loss, and the gate. Facts dated 2026-11-01 come from [official sources](06-official-sources.md); re-check versions before quoting them. Config snippets: [recipes](07-config-recipes.md).
 
+First map the [four validation categories](08-validation-architecture.md). Reducing PR
+frequency or moving integrated verification is a policy/scheduling change; measure it
+separately from making an unchanged workload execute faster. A small, cheap full suite
+may remain the best PR change check.
+
 ## 1. Fast runners
 
 **Applies when** CPU- or I/O-bound jobs dominate the critical path, or queue p95 is high on the current pool.
@@ -70,11 +75,19 @@ Each module: when it applies, the experiment, the counterexamples that make it a
 
 **Counterexamples.** Implicit dependencies (env files, shared fixtures, Docker images, generated code) missing from the graph; merge-base wrong in merge queue or shallow clone.
 
-**Gate.** Adversarial diffs select FULL; zero escaped defects in replay; scheduled FULL run on main (at least daily) and on `merge_group` if a merge queue exists.
+**Gate.** Edited tests are included along with affected tests and transitive dependents;
+unknown or high-risk inputs select FULL. Shadow selected vs full results and replay
+adversarial diffs before moving required work. Zero observed escapes is evidence, not
+a guarantee. Keep category-3 full verification under the accepted merge-queue or
+rolling-main policy, and certify only tested commits/artifacts; scheduled runs supplement
+that policy. See [full-suite policy](08-validation-architecture.md).
 
-## 7. Pre-push hooks
+## 7. Local hooks
 
-**Experiment.** Changed-file format + lint (seconds), and a project-level typecheck only when it is fast. Tools: lefthook, husky + lint-staged, pre-commit. Agents benefit most: a red hook beats a 10-minute CI round-trip.
+**Experiment.** Fast changed-file format/lint in pre-commit, and project-level checks in
+pre-push only when measured cheap. Compilation is not universally fast. Use existing
+lefthook, husky + lint-staged or pre-commit configuration where appropriate. Run the
+same authoritative category-1 checks in CI; hooks provide earlier feedback.
 
 **Counterexamples.** Hook slower than 30 s (people and agents bypass it); hook differs from CI config (different results); hook installs via `postinstall` from untrusted packages.
 

@@ -33,7 +33,29 @@ Consequences:
 
 ## False-green patterns to hunt
 
-`continue-on-error: true`, `|| true`, `set +e`, `exit 0` in traps, test commands with `--passWithNoTests`, `--bail` combined with ignored exit codes, coverage thresholds lowered, `if:` conditions that are always false on PRs, selectors with empty output treated as "nothing to test", matrix `fail-fast: false` with no aggregate, tests filtered by `.only`/`skip` committed by accident.
+`continue-on-error: true`, `|| true`, `set +e`, `exit 0` in traps, test commands with `--passWithNoTests`, `--bail` combined with ignored exit codes, coverage thresholds lowered, `if:` conditions that are always false on PRs, selectors with empty output treated as "nothing to test", tests filtered by `.only`/`skip` committed by accident.
+
+`fail-fast: false` keeps sibling matrix jobs running; it does not tolerate their
+failures. Require every relevant result directly or through an event-aware aggregate.
+Keeping all shards can be necessary for complete diagnostic and coverage reports.
+
+## Moving checks between validation categories
+
+Use the [four-category contract](08-validation-architecture.md). Preserve the total
+required verification across PR, integration and release stages; document any reduced
+scope as a policy change. A selected PR gate certifies that selection, not the full
+product. A scheduled green, an older same-SHA run with different inputs, or a green PR
+head does not automatically certify the integrated release candidate.
+
+Before removing a full PR gate, validate selection against a full oracle and establish
+the replacement category-3 execution, exact commit/artifact records, failure response
+and maximum unverified age. Keep broader PR gates if policy is unknown, dependency
+coverage incomplete or the change affects security, contracts or migrations.
+
+Feature gates and a 5% rollout do not make irreversible data changes reversible.
+Define compatibility, telemetry freshness/sample requirements, halt and recovery for
+the actual product. Missing metrics never mean healthy. Existing deployment approvals
+remain authoritative; a CI budget is never permission to bypass them.
 
 ## Failure testing (do it, don't argue it)
 

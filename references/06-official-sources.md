@@ -25,6 +25,26 @@ Accessed 2026-11-01. Versions move: re-open the page before quoting a version, f
 | Matrix strategy (accessed 2026-11-02) | `strategy.fail-fast` defaults to true and cancels in-progress and queued matrix jobs when one fails; without `max-parallel`, GitHub runs as many matrix jobs in parallel as runners allow | https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax |
 | OIDC permission (accessed 2026-11-02) | `id-token: write` is required to request the JWT and can be set on a single job | https://docs.github.com/en/actions/reference/security/oidc |
 
+## Validation architecture and reviewed updates (2026-11-17)
+
+The four-category placement, 300-second PR objective, rolling-main controls and
+release evidence contract are proposed design rules, not measured improvements or
+provider guarantees. Keep exact repository policy and tool/platform support explicit.
+
+| Topic | Fact relied on | URL |
+|---|---|---|
+| Merge candidates | Required queue checks apply to the combined candidate; GitHub Actions needs `merge_group`; temporary candidate SHA differs from the PR | https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue |
+| Artifact attestations | Build source/workflow provenance must be verified; provenance alone does not establish safety or passing tests | https://docs.github.com/en/actions/concepts/security/artifact-attestations |
+| Deployment gates | Jobs must satisfy configured environment protection before execution/access to environment secrets; availability depends on repository/plan | https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments |
+| Progressive delivery | Optional Argo example: analysis results can continue, abort or pause a rollout; use the existing platform's equivalent | https://argo-rollouts.readthedocs.io/en/stable/features/analysis/ |
+| Draft lifecycle | Default PR types exclude `ready_for_review`; add it when draft skipping relies on a later ready transition | https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows |
+| Matrix cancellation | `fail-fast` controls sibling cancellation; `continue-on-error` tolerates a failure | https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax |
+| Vitest 5 reports | Default blob reports moved to `.vitest/blob/blob-*.json`; explicit output paths remain supported | https://vitest.dev/guide/migration/ · https://vitest.dev/guide/reporters |
+| Missing artifacts | upload-artifact defaults to warning for no matching files; `if-no-files-found: error` makes missing required reports fail | https://github.com/actions/upload-artifact |
+| Workflow lockfiles | `.github/workflows/actions.lock` resolves action dependencies; reusable workflow calls require separate pinning; discovery markers alone do not verify resolution | https://docs.github.com/en/actions/concepts/security/workflow-dependency-lockfiles |
+| Parallel steps | Native `background`, `parallel`, wait and cancel syntax; measurements must account for overlapping step intervals | https://github.blog/changelog/2026-06-25-actions-steps-can-now-be-run-in-parallel/ |
+| Cache access | Workflow/job `cache-mode` is service-enforced; inspect effective scope rather than inferring permission from action names | https://github.blog/changelog/2026-09-10-control-github-actions-cache-access-with-cache-mode/ |
+
 ## Not confirmed on 2026-11-01
 
 Do not assert these without a fresh source: Blacksmith per-minute price; whether TS 7 `tsc` has declaration-emit gaps; Nx merge-base semantics in detail; the exact `github.event.pull_request.draft` payload description (field name used in recipes, page not re-read on 2026-11-02).
