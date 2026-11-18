@@ -1,6 +1,8 @@
 # Official sources
 
-Accessed 2026-11-01. Versions move: re-open the page before quoting a version, flag, or price in a report, and update the access date here when you do.
+Initial source review: 2026-11-01. Expanded platform, measurement and stack review:
+2026-11-17. Dates below state the review that supports a claim, not a guarantee of
+future compatibility. Re-open sources before quoting a current version or price.
 
 | Topic | Fact relied on | URL |
 |---|---|---|
@@ -45,6 +47,61 @@ provider guarantees. Keep exact repository policy and tool/platform support expl
 | Parallel steps | Native `background`, `parallel`, wait and cancel syntax; measurements must account for overlapping step intervals | https://github.blog/changelog/2026-06-25-actions-steps-can-now-be-run-in-parallel/ |
 | Cache access | Workflow/job `cache-mode` is service-enforced; inspect effective scope rather than inferring permission from action names | https://github.blog/changelog/2026-09-10-control-github-actions-cache-access-with-cache-mode/ |
 
-## Not confirmed on 2026-11-01
+## Measurement and implementation sources (2026-11-17)
 
-Do not assert these without a fresh source: Blacksmith per-minute price; whether TS 7 `tsc` has declaration-emit gaps; Nx merge-base semantics in detail; the exact `github.event.pull_request.draft` payload description (field name used in recipes, page not re-read on 2026-11-02).
+| Topic | Fact relied on | URL |
+|---|---|---|
+| Workflow runs and attempts | Date/workflow filters, run-attempt endpoints and query limits; distinguish a rerun from a different run | https://docs.github.com/en/rest/actions/workflow-runs |
+| Workflow jobs | Paginated jobs and attempt identifiers; timing evidence is not a complete workflow DAG | https://docs.github.com/en/rest/actions/workflow-jobs |
+| Branch rules | Paginate applicable rules; preserve required-check app and required-workflow identities | https://docs.github.com/en/rest/repos/rules |
+| REST best practice | Serial requests, bounded retry/backoff and conditional requests | https://docs.github.com/en/rest/using-the-rest-api/best-practices-for-using-the-rest-api |
+| REST authentication errors | An inaccessible private resource can return 404; absence must not be inferred | https://docs.github.com/en/rest/using-the-rest-api/troubleshooting-the-rest-api |
+| REST API version | Collector explicitly requests 2026-03-10; record the actual API version | https://docs.github.com/en/rest/about-the-rest-api/api-versions |
+| Subprocess lifecycle | POSIX session/process-group controls and timeout handling; process launch is not containment | https://docs.python.org/3/library/subprocess.html · https://docs.python.org/3/library/os.html#os.killpg |
+| actionlint | Own CI pins v1.7.12 and verifies release archive SHA-256; new platform syntax needs separate compatibility checks | https://github.com/rhysd/actionlint · https://github.com/rhysd/actionlint/releases/tag/v1.7.12 |
+| Action update proposals | Dependabot github-actions ecosystem and schedule configuration | https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file |
+
+## Platform updates (2026-11-17)
+
+| Topic | Fact relied on | URL |
+|---|---|---|
+| Cache capabilities | Job override; read/write/write-only/none; explicit reusable caller limit; ordinary PR merge-ref scope | https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching |
+| Native workflow structure | Parallel/background/wait/cancel syntax, composite limitations and same-repository action resolution | https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax |
+| Lockfile generation | Enterprise Cloud support documented; generated lockfiles, local-action migration and reusable source-repository coverage | https://docs.github.com/en/actions/how-tos/secure-your-work/lock-workflow-dependencies |
+| Lockfile format | v0.0.3; per-workflow transitive pin coverage, owner/repo identities and reference normalization | https://github.com/github/actions-lockfile |
+| Concurrency queue | queue:max bounded at 100; cannot combine with cancel-in-progress:true; distinct from merge queue | https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency |
+| Public privileged trigger | Announced default block for public pull_request_target from 2026-12-02; scope exceptions matter | https://github.blog/changelog/2026-11-02-pull_request_target-blocked-by-default-december-2/ |
+| Retention | Actions retention now includes checks/runs/statuses on github.com; deleted evidence unavailable | https://github.blog/changelog/2026-10-01-actions-retention-now-covers-checks-runs-and-statuses/ |
+| Bot-created PRs | Selected GITHUB_TOKEN PR events create approval-required runs; approval is not runner queue | https://docs.github.com/en/actions/concepts/security/github_token |
+| Hosted runner constraints | Slim/container resources and timeout, architecture and environment distinctions | https://docs.github.com/en/actions/reference/runners/github-hosted-runners |
+| Self-hosted runner support | Supported systems/architectures and responsibility for environment/isolation | https://docs.github.com/en/actions/concepts/runners/self-hosted-runners |
+| Multi-cloud compute | Eligible hosted Linux workloads, plan-specific adoption and expanded egress ranges | https://github.blog/changelog/2026-10-28-github-actions-adds-multi-cloud-compute-to-improve-reliability/ |
+| Cache economics | 10 GB included per repository; higher configured limits can incur storage charges | https://docs.github.com/en/billing/concepts/product-billing/github-actions |
+
+## Stack adapter sources (2026-11-17)
+
+| Topic | Fact relied on | URL |
+|---|---|---|
+| Go | Test-result caching, -count, package/test parallelism and build cache semantics | https://pkg.go.dev/cmd/go |
+| setup-go | v7 cache behavior, go.mod input and current action requirements | https://github.com/actions/setup-go |
+| Next.js cache | .next/cache persistence for CI | https://nextjs.org/docs/app/guides/ci-build-caching |
+| Next.js type generation | next typegen and distinct production build behavior | https://nextjs.org/docs/app/api-reference/cli/next |
+| Vitest filesystem module cache | Current default and cache/plugin compatibility controls | https://vitest.dev/config/fsmodulecache |
+| Vitest shared server | Compatible inline-project reuse and configuration constraints | https://vitest.dev/config/sharedviteserver |
+| Vitest profiling | Separate transform/setup/execution bottlenecks before reducing isolation | https://vitest.dev/guide/profiling-test-performance · https://vitest.dev/guide/improving-performance |
+| Vitest coverage | Provider/config/threshold obligations remain when sharding | https://vitest.dev/guide/coverage.html |
+| Combined typed lint | oxlint --type-aware --type-check reports compiler diagnostics; compatibility and declaration gates remain | https://oxc.rs/docs/guide/usage/linter/type-aware.html |
+| TypeScript release distinction | 7.1 beta is separate from the stable 7.0 migration and has its own compatibility scope | https://devblogs.microsoft.com/typescript/announcing-typescript-7-1-beta/ |
+| Formatting | Oxfmt coverage and Bun 1.4.4 formatter/check/no-script behavior; vendor timing is not repository evidence | https://oxc.rs/docs/guide/usage/formatter · https://bun.com/blog/bun-v1.4.4 |
+| Docker GHA cache | Image scopes, mode=min/max, v2 compatibility and cache mount caveats | https://docs.docker.com/build/cache/backends/gha/ · https://docs.docker.com/build/ci/github-actions/cache/ |
+| Playwright | File/test distribution, fullyParallel and report merging | https://playwright.dev/docs/test-sharding |
+| Nx remote cache | Task determinism, remote-cache behavior and trust requirements | https://nx.dev/docs/features/ci-features/remote-cache |
+| Turborepo remote cache | Cached task outputs/logs and integrity/signature options | https://turborepo.dev/docs/core-concepts/remote-caching |
+
+## Not confirmed for an arbitrary target repository
+
+Current paid-runner quotes; actual billing/allowances; GHES/plan feature support;
+downstream framework/compiler/plugin compatibility; complete test-selection coverage;
+cryptographic provenance verification; telemetry comparability; measured savings.
+These require target evidence. Python helper fixtures do not establish production
+support for every stack or a measured performance improvement.

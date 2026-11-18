@@ -1,0 +1,2444 @@
+{
+  "schema": "ci-feature-matrix/1",
+  "reviewed_on": "2026-11-17",
+  "review_timezone": "America/New_York",
+  "source_register": "references/06-official-sources.md",
+  "purpose": "Dated support and verification inventory for repository capabilities and all 36 research recommendations.",
+  "status_definitions": {
+    "implemented": "Repository helper or contract is implemented and locally fixture-tested within its stated input scope.",
+    "implemented_with_limits": "Concrete implementation is present; listed ingestion, automation or target-verification limits remain.",
+    "conditional": "Detection, inspection or documented experiment is available; adopting or running the downstream capability requires target evidence."
+  },
+  "verification_policy": {
+    "downstream_runtime_compatibility": "unverified",
+    "provider_runtime_tests_executed": false,
+    "stack_runtime_tests_executed": false,
+    "external_configuration_changes_applied": false,
+    "measured_performance_improvement": "unverified",
+    "note": "Python fixtures exercise this skill's behavior. Source review, static configuration and helper tests do not establish downstream runtime compatibility, production readiness or performance gains."
+  },
+  "local_verification": {
+    "environment": {
+      "python": "3.12.14",
+      "platform": "linux"
+    },
+    "command": [
+      "python3",
+      "-m",
+      "unittest",
+      "discover",
+      "-s",
+      "tests",
+      "-v"
+    ],
+    "result": "passed",
+    "scope": "Repository Python behavior and packaging fixtures only; configured CI Python 3.10/3.x execution is not asserted.",
+    "test_paths": [
+      "tests/test_collection_contract.py",
+      "tests/test_analysis_contract.py",
+      "tests/test_benchmark_contract.py",
+      "tests/test_validation_evidence.py",
+      "tests/test_selector_contract.py",
+      "tests/test_discovery_contract.py",
+      "tests/test_adapter_discovery.py",
+      "tests/test_report_transport.py",
+      "tests/test_workflow_semantics.py",
+      "tests/test_feature_matrix.py"
+    ]
+  },
+  "features": [
+    {
+      "id": "collector",
+      "domain": "repository",
+      "title": "Immutable GitHub snapshots and bounded read-only collection",
+      "status": "implemented",
+      "reviewed_on": "2026-11-17",
+      "version_scope": {
+        "reviewed": [
+          "ci-collect/2",
+          "ci-snapshot-pointer/1",
+          "ci-snapshot-manifest/1",
+          "GitHub REST 2026-03-10"
+        ],
+        "target": "Python >=3.10; local fixture execution on Python 3.12.14/Linux"
+      },
+      "support_constraints": [
+        "Python standard library only",
+        "GET-only GitHub.com API through an installed authenticated gh CLI; live authentication was not exercised by these fixtures",
+        "Filtered searches are bounded at 1000; partition larger studies into explicit date/workflow windows and inspect completeness",
+        "Automatic date-window partitioning and webhook ingestion are not implemented",
+        "Missing permission, retention, attempt history and partial payloads remain explicit gaps"
+      ],
+      "verification": {
+        "kind": "python_fixtures",
+        "runtime_execution": "local_passed",
+        "downstream_runtime_compatibility": "unverified"
+      },
+      "implementation_paths": [
+        "scripts/collect_gh.py"
+      ],
+      "documentation_paths": [
+        "references/04-measurement-benchmarking.md",
+        "references/11-evidence-formats.md"
+      ],
+      "test_paths": [
+        "tests/test_collection_contract.py"
+      ],
+      "source_urls": [
+        "https://docs.github.com/en/rest/actions/workflow-runs",
+        "https://docs.github.com/en/rest/actions/workflow-jobs",
+        "https://docs.github.com/en/rest/repos/rules",
+        "https://docs.github.com/en/rest/using-the-rest-api/best-practices-for-using-the-rest-api",
+        "https://docs.github.com/en/rest/using-the-rest-api/troubleshooting-the-rest-api",
+        "https://docs.github.com/en/rest/about-the-rest-api/api-versions"
+      ]
+    },
+    {
+      "id": "analyzer",
+      "domain": "repository",
+      "title": "Consistent cohorts, attempts, usage and conditional price estimates",
+      "status": "implemented",
+      "reviewed_on": "2026-11-17",
+      "version_scope": {
+        "reviewed": [
+          "ci-metrics/2",
+          "ci-pricing/1",
+          "ci-cohort-context/1"
+        ],
+        "target": "Python >=3.10; local fixture execution on Python 3.12.14/Linux"
+      },
+      "support_constraints": [
+        "Python standard library only",
+        "Manifest-listed payloads only; legacy raw data is explicitly unverified",
+        "Diagnostic run timing is not authoritative required-check or release certification",
+        "Dated prices, runner classes, cohort context and inclusion rules must be supplied; output is not a provider invoice"
+      ],
+      "verification": {
+        "kind": "python_fixtures",
+        "runtime_execution": "local_passed",
+        "downstream_runtime_compatibility": "unverified"
+      },
+      "implementation_paths": [
+        "scripts/analyze_gh.py"
+      ],
+      "documentation_paths": [
+        "references/04-measurement-benchmarking.md",
+        "references/11-evidence-formats.md"
+      ],
+      "test_paths": [
+        "tests/test_analysis_contract.py"
+      ],
+      "source_urls": [
+        "https://docs.github.com/en/rest/actions/workflow-runs",
+        "https://docs.github.com/en/rest/actions/workflow-jobs",
+        "https://docs.github.com/en/rest/repos/rules",
+        "https://docs.github.com/en/billing/reference/actions-runner-pricing"
+      ]
+    },
+    {
+      "id": "job_graph",
+      "domain": "repository",
+      "title": "Required dependency closure and recomputed DAG counterfactuals",
+      "status": "implemented",
+      "reviewed_on": "2026-11-17",
+      "version_scope": {
+        "reviewed": [
+          "ci-job-graph/1"
+        ],
+        "target": "Python >=3.10; local fixture execution on Python 3.12.14/Linux"
+      },
+      "support_constraints": [
+        "Python standard library only",
+        "Requires an explicitly complete expanded graph, required nodes and valid durations",
+        "Unexpanded matrices, cycles, missing dependencies and unverifiable durations remain unknown",
+        "No automatic provider graph extraction or runtime scheduler simulation"
+      ],
+      "verification": {
+        "kind": "python_fixtures",
+        "runtime_execution": "local_passed",
+        "downstream_runtime_compatibility": "unverified"
+      },
+      "implementation_paths": [
+        "scripts/graph_metrics.py",
+        "scripts/analyze_gh.py"
+      ],
+      "documentation_paths": [
+        "references/04-measurement-benchmarking.md",
+        "references/11-evidence-formats.md"
+      ],
+      "test_paths": [
+        "tests/test_analysis_contract.py"
+      ],
+      "source_urls": [
+        "https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax",
+        "https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/troubleshooting-required-status-checks"
+      ]
+    },
+    {
+      "id": "benchmark",
+      "domain": "repository",
+      "title": "Process cleanup, paired trials, provenance and statistical evidence",
+      "status": "implemented",
+      "reviewed_on": "2026-11-17",
+      "version_scope": {
+        "reviewed": [
+          "ci-benchmark/2"
+        ],
+        "target": "Python >=3.10; local fixture execution on Python 3.12.14/Linux"
+      },
+      "support_constraints": [
+        "Python standard library only",
+        "POSIX process-group cleanup; unsupported Windows execution fails before starting a command",
+        "Local process management is not a security sandbox",
+        "Comparisons require supplied workload/toolchain/cache/runner context and verified source fingerprints",
+        "Statistical eligibility never authorizes automatic adoption"
+      ],
+      "verification": {
+        "kind": "python_fixtures",
+        "runtime_execution": "local_passed",
+        "downstream_runtime_compatibility": "unverified"
+      },
+      "implementation_paths": [
+        "scripts/benchmark.py"
+      ],
+      "documentation_paths": [
+        "references/04-measurement-benchmarking.md",
+        "references/11-evidence-formats.md"
+      ],
+      "test_paths": [
+        "tests/test_benchmark_contract.py"
+      ],
+      "source_urls": [
+        "https://docs.python.org/3/library/subprocess.html",
+        "https://docs.python.org/3/library/os.html#os.killpg"
+      ]
+    },
+    {
+      "id": "validation_evaluator",
+      "domain": "repository",
+      "title": "Four-category policy, feedback, full-suite and release/rollout evidence",
+      "status": "implemented",
+      "reviewed_on": "2026-11-17",
+      "version_scope": {
+        "reviewed": [
+          "ci-validation-policy/1",
+          "ci-validation-evidence/1",
+          "ci-validation-result/1"
+        ],
+        "target": "Python >=3.10; local fixture execution on Python 3.12.14/Linux"
+      },
+      "support_constraints": [
+        "Python standard library only",
+        "Consumes supplied normalized evidence; does not fetch provider check ledgers, verify signatures or promote a deployment",
+        "Unknown, incomplete, stale, superseded or mismatched evidence cannot certify the current candidate",
+        "Release evidence binds exact source, build inputs and artifact; rollout evidence binds deployment/environment/stage and comparable telemetry",
+        "Repository-specific obligations and thresholds must be reviewed before enforcement"
+      ],
+      "verification": {
+        "kind": "python_fixtures",
+        "runtime_execution": "local_passed",
+        "downstream_runtime_compatibility": "unverified"
+      },
+      "implementation_paths": [
+        "scripts/evaluate_validation.py"
+      ],
+      "documentation_paths": [
+        "references/08-validation-architecture.md",
+        "references/11-evidence-formats.md"
+      ],
+      "test_paths": [
+        "tests/test_validation_evidence.py"
+      ],
+      "source_urls": [
+        "https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/troubleshooting-required-status-checks",
+        "https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue",
+        "https://docs.github.com/en/actions/concepts/security/artifact-attestations",
+        "https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments",
+        "https://argo-rollouts.readthedocs.io/en/stable/features/analysis/"
+      ]
+    },
+    {
+      "id": "selector",
+      "domain": "repository",
+      "title": "Conservative affected-target selection",
+      "status": "implemented",
+      "reviewed_on": "2026-11-17",
+      "version_scope": {
+        "reviewed": [
+          "Existing mapping contract with optional target inventory"
+        ],
+        "target": "Python >=3.10; local fixture execution on Python 3.12.14/Linux"
+      },
+      "support_constraints": [
+        "Python standard library only",
+        "Mapping correctness and dependency coverage require repository evidence",
+        "Malformed maps fail nonzero; ambiguous changes or unknown control inputs select the full suite",
+        "No static map proves all runtime dependencies; full-suite comparison and canaries remain required"
+      ],
+      "verification": {
+        "kind": "python_fixtures",
+        "runtime_execution": "local_passed",
+        "downstream_runtime_compatibility": "unverified"
+      },
+      "implementation_paths": [
+        "scripts/select_affected.py"
+      ],
+      "documentation_paths": [
+        "references/03-security-correctness.md",
+        "references/07-config-recipes.md"
+      ],
+      "test_paths": [
+        "tests/test_selector_contract.py"
+      ],
+      "source_urls": [
+        "https://nx.dev/docs/features/ci-features/affected",
+        "https://turborepo.dev/docs/reference/run",
+        "https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue"
+      ]
+    },
+    {
+      "id": "discovery",
+      "domain": "repository",
+      "title": "Bounded evidence inventory and conditional adapter routing",
+      "status": "implemented",
+      "reviewed_on": "2026-11-17",
+      "version_scope": {
+        "reviewed": [
+          "ci-discovery/1",
+          "validation-topology/1",
+          "adapter_candidates advisory inventory"
+        ],
+        "target": "Python >=3.10; local fixture execution on Python 3.12.14/Linux"
+      },
+      "support_constraints": [
+        "Python standard library only",
+        "No repository configuration or package scripts are executed",
+        "Symlinks, nonregular files, unsafe reads and truncated inventories remain excluded or unknown",
+        "Filenames, dependencies, source extensions and marker lines are evidence candidates, not category assignments or compatibility proof",
+        "Other providers and unresolved workflow expansion remain explicitly unparsed"
+      ],
+      "verification": {
+        "kind": "python_fixtures",
+        "runtime_execution": "local_passed",
+        "downstream_runtime_compatibility": "unverified"
+      },
+      "implementation_paths": [
+        "scripts/discover_repo.py"
+      ],
+      "documentation_paths": [
+        "references/01-discovery-matrix.md",
+        "references/08-validation-architecture.md",
+        "references/10-stack-adapters.md"
+      ],
+      "test_paths": [
+        "tests/test_discovery_contract.py",
+        "tests/test_adapter_discovery.py"
+      ],
+      "source_urls": [
+        "https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows",
+        "https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax",
+        "https://nx.dev/docs/features/ci-features/affected"
+      ]
+    },
+    {
+      "id": "report_transport",
+      "domain": "repository",
+      "title": "Validate and stage the expected shard report transport",
+      "status": "implemented",
+      "reviewed_on": "2026-11-17",
+      "version_scope": {
+        "reviewed": [
+          "JSON report transport contract"
+        ],
+        "target": "Python >=3.10; local fixture execution on Python 3.12.14/Linux"
+      },
+      "support_constraints": [
+        "Python standard library only",
+        "Validates expected shard identities, JSON files, bounds and safe filesystem transport",
+        "Does not evaluate test success, coverage thresholds or version-specific report semantics",
+        "The target's installed test runner must merge reports and enforce its original gates"
+      ],
+      "verification": {
+        "kind": "python_fixtures",
+        "runtime_execution": "local_passed",
+        "downstream_runtime_compatibility": "unverified"
+      },
+      "implementation_paths": [
+        "scripts/check_reports.py"
+      ],
+      "documentation_paths": [
+        "references/07-config-recipes.md",
+        "references/10-stack-adapters.md"
+      ],
+      "test_paths": [
+        "tests/test_report_transport.py"
+      ],
+      "source_urls": [
+        "https://vitest.dev/guide/reporters",
+        "https://vitest.dev/guide/migration/",
+        "https://github.com/actions/upload-artifact"
+      ]
+    },
+    {
+      "id": "workflow_inspector",
+      "domain": "repository",
+      "title": "Advisory normalized workflow structure inspection",
+      "status": "implemented",
+      "reviewed_on": "2026-11-17",
+      "version_scope": {
+        "reviewed": [
+          "ci-workflow-inspection/1",
+          "actions.lock v0.0.3",
+          "YAML 1.2 normalized JSON input"
+        ],
+        "target": "Python >=3.10; local fixture execution on Python 3.12.14/Linux"
+      },
+      "support_constraints": [
+        "Python standard library only",
+        "Requires trusted lossless YAML 1.2 conversion with duplicate-key rejection; no parser is installed or executed",
+        "Recurses through native parallel/background steps; validates explicit cache limits and static concurrency combinations",
+        "Local fixture coverage does not establish GitHub/GHES feature availability",
+        "Matrices, expressions, reusable/composite expansion, runtime outcomes, ownership and commit reachability remain unknown"
+      ],
+      "verification": {
+        "kind": "python_fixtures",
+        "runtime_execution": "local_passed",
+        "downstream_runtime_compatibility": "unverified"
+      },
+      "implementation_paths": [
+        "scripts/inspect_workflows.py"
+      ],
+      "documentation_paths": [
+        "references/09-platform-updates.md",
+        "references/11-evidence-formats.md"
+      ],
+      "test_paths": [
+        "tests/test_workflow_semantics.py"
+      ],
+      "source_urls": [
+        "https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax",
+        "https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching",
+        "https://docs.github.com/en/actions/concepts/security/workflow-dependency-lockfiles",
+        "https://docs.github.com/en/actions/how-tos/secure-your-work/lock-workflow-dependencies",
+        "https://github.com/github/actions-lockfile",
+        "https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency"
+      ]
+    },
+    {
+      "id": "github_parallel",
+      "domain": "platform",
+      "title": "Native background, parallel and synchronization steps",
+      "status": "conditional",
+      "reviewed_on": "2026-11-17",
+      "version_scope": {
+        "reviewed": [
+          "GitHub.com June 25, 2026 announcement; workflow syntax reviewed November 17, 2026"
+        ],
+        "target": "Unverified; inspect the installed version, plan and configuration before adoption"
+      },
+      "support_constraints": [
+        "At most 10 concurrent background steps per job; composites can run in background but cannot declare internal background/parallel steps",
+        "wait, wait-all and cancel do not support if; cleanup and failure propagation require a target workflow run",
+        "Compare summed work with interval-union elapsed coverage; feature availability must be supplied"
+      ],
+      "verification": {
+        "kind": "source_review",
+        "runtime_execution": "not_executed",
+        "downstream_runtime_compatibility": "unverified"
+      },
+      "implementation_paths": [
+        "scripts/inspect_workflows.py",
+        "scripts/discover_repo.py",
+        "scripts/analyze_gh.py"
+      ],
+      "documentation_paths": [
+        "references/09-platform-updates.md",
+        "references/04-measurement-benchmarking.md"
+      ],
+      "test_paths": [
+        "tests/test_workflow_semantics.py",
+        "tests/test_discovery_contract.py",
+        "tests/test_analysis_contract.py"
+      ],
+      "source_urls": [
+        "https://github.blog/changelog/2026-06-25-actions-steps-can-now-be-run-in-parallel/",
+        "https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax"
+      ]
+    },
+    {
+      "id": "github_cache_access",
+      "domain": "platform",
+      "title": "Cache access capabilities and reusable caller limits",
+      "status": "conditional",
+      "reviewed_on": "2026-11-17",
+      "version_scope": {
+        "reviewed": [
+          "GitHub cache-mode documentation reviewed November 17, 2026"
+        ],
+        "target": "Unverified; inspect the installed version, plan and configuration before adoption"
+      },
+      "support_constraints": [
+        "read, write, write-only and none are separate access sets",
+        "Job settings override workflow settings; an explicit caller capability caps a reusable callee",
+        "Low-trust defaults and ordinary pull_request merge-ref cache scope must be resolved from trigger context"
+      ],
+      "verification": {
+        "kind": "source_review",
+        "runtime_execution": "not_executed",
+        "downstream_runtime_compatibility": "unverified"
+      },
+      "implementation_paths": [
+        "scripts/inspect_workflows.py",
+        "scripts/discover_repo.py"
+      ],
+      "documentation_paths": [
+        "references/09-platform-updates.md"
+      ],
+      "test_paths": [
+        "tests/test_workflow_semantics.py",
+        "tests/test_discovery_contract.py"
+      ],
+      "source_urls": [
+        "https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching"
+      ]
+    },
+    {
+      "id": "github_action_lockfiles",
+      "domain": "platform",
+      "title": "Native action lockfiles and immutable dependency identities",
+      "status": "conditional",
+      "reviewed_on": "2026-11-17",
+      "version_scope": {
+        "reviewed": [
+          "actions.lock v0.0.3; GitHub Enterprise Cloud how-to reviewed November 17, 2026"
+        ],
+        "target": "Unverified; inspect the installed version, plan and configuration before adoption"
+      },
+      "support_constraints": [
+        "Documented availability is Enterprise Cloud; verify target support",
+        "Generate .github/workflows/actions.lock with gh actions-lock and review commit/owner/repository changes",
+        "Reusable job-level calls need their own immutable references and source-repository coverage",
+        "$/ resolves at the containing workflow/action's repository and running commit; unavailable on GHES",
+        "Static lockfile inspection does not verify transitive runtime coverage or live identities"
+      ],
+      "verification": {
+        "kind": "source_review",
+        "runtime_execution": "not_executed",
+        "downstream_runtime_compatibility": "unverified"
+      },
+      "implementation_paths": [
+        "scripts/inspect_workflows.py",
+        "scripts/discover_repo.py"
+      ],
+      "documentation_paths": [
+        "references/09-platform-updates.md",
+        "references/03-security-correctness.md"
+      ],
+      "test_paths": [
+        "tests/test_workflow_semantics.py",
+        "tests/test_discovery_contract.py"
+      ],
+      "source_urls": [
+        "https://docs.github.com/en/actions/concepts/security/workflow-dependency-lockfiles",
+        "https://docs.github.com/en/actions/how-tos/secure-your-work/lock-workflow-dependencies",
+        "https://github.com/github/actions-lockfile",
+        "https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax"
+      ]
+    },
+    {
+      "id": "github_concurrency",
+      "domain": "platform",
+      "title": "Purpose-specific bounded concurrency queues",
+      "status": "conditional",
+      "reviewed_on": "2026-11-17",
+      "version_scope": {
+        "reviewed": [
+          "queue: max documentation reviewed November 17, 2026"
+        ],
+        "target": "Unverified; inspect the installed version, plan and configuration before adoption"
+      },
+      "support_constraints": [
+        "Up to 100 pending runs/jobs per group; incompatible with cancel-in-progress: true",
+        "Concurrency queue and merge queue have different purposes",
+        "Rolling-main completion, green age and candidate lag need repository policy and runtime evidence"
+      ],
+      "verification": {
+        "kind": "source_review",
+        "runtime_execution": "not_executed",
+        "downstream_runtime_compatibility": "unverified"
+      },
+      "implementation_paths": [
+        "scripts/inspect_workflows.py",
+        "scripts/discover_repo.py",
+        "scripts/evaluate_validation.py"
+      ],
+      "documentation_paths": [
+        "references/09-platform-updates.md",
+        "references/08-validation-architecture.md"
+      ],
+      "test_paths": [
+        "tests/test_workflow_semantics.py",
+        "tests/test_discovery_contract.py",
+        "tests/test_validation_evidence.py"
+      ],
+      "source_urls": [
+        "https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency",
+        "https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue"
+      ]
+    },
+    {
+      "id": "github_public_privileged_trigger",
+      "domain": "platform",
+      "title": "Announced default block for public pull_request_target",
+      "status": "conditional",
+      "reviewed_on": "2026-11-17",
+      "version_scope": {
+        "reviewed": [
+          "Announcement November 2, 2026; effective December 2, 2026"
+        ],
+        "target": "Unverified; inspect the installed version, plan and configuration before adoption"
+      },
+      "support_constraints": [
+        "Source-reviewed upcoming change, not a claim that the default block is already active on the review date",
+        "Public GitHub.com repositories are in scope; private/internal repositories and GHES differ",
+        "Inspect actual applicable policies; optimization does not authorize privileged execution or a bypass"
+      ],
+      "verification": {
+        "kind": "source_review",
+        "runtime_execution": "not_executed",
+        "downstream_runtime_compatibility": "unverified"
+      },
+      "implementation_paths": [
+        "scripts/discover_repo.py"
+      ],
+      "documentation_paths": [
+        "references/09-platform-updates.md",
+        "references/03-security-correctness.md"
+      ],
+      "test_paths": [
+        "tests/test_discovery_contract.py"
+      ],
+      "source_urls": [
+        "https://github.blog/changelog/2026-11-02-pull_request_target-blocked-by-default-december-2/"
+      ]
+    },
+    {
+      "id": "github_retention",
+      "domain": "platform",
+      "title": "Retention completeness for runs, checks and statuses",
+      "status": "conditional",
+      "reviewed_on": "2026-11-17",
+      "version_scope": {
+        "reviewed": [
+          "GitHub.com October 1, 2026 retention announcement"
+        ],
+        "target": "Unverified; inspect the installed version, plan and configuration before adoption"
+      },
+      "support_constraints": [
+        "Applies to GitHub.com, including third-party checks; inspect GHES separately",
+        "Deleted evidence cannot be reconstructed; permission/retention gaps remain unknown",
+        "Keep bounded immutable snapshots under the target's retention policy"
+      ],
+      "verification": {
+        "kind": "source_review",
+        "runtime_execution": "not_executed",
+        "downstream_runtime_compatibility": "unverified"
+      },
+      "implementation_paths": [
+        "scripts/collect_gh.py",
+        "scripts/analyze_gh.py"
+      ],
+      "documentation_paths": [
+        "references/09-platform-updates.md",
+        "references/04-measurement-benchmarking.md"
+      ],
+      "test_paths": [
+        "tests/test_collection_contract.py",
+        "tests/test_analysis_contract.py"
+      ],
+      "source_urls": [
+        "https://github.blog/changelog/2026-10-01-actions-retention-now-covers-checks-runs-and-statuses/",
+        "https://docs.github.com/en/rest/actions/workflow-runs"
+      ]
+    },
+    {
+      "id": "github_approval_wait",
+      "domain": "platform",
+      "title": "Separate token-trigger approval waiting from execution queueing",
+      "status": "conditional",
+      "reviewed_on": "2026-11-17",
+      "version_scope": {
+        "reviewed": [
+          "GITHUB_TOKEN documentation reviewed November 17, 2026"
+        ],
+        "target": "Unverified; inspect the installed version, plan and configuration before adoption"
+      },
+      "support_constraints": [
+        "opened, synchronize and reopened pull_request events from GITHUB_TOKEN create approval-required runs",
+        "Run timestamps alone do not attribute approval delay; event/check timing must be supplied",
+        "Do not relabel approval wait as runner queue or omit it from complete feedback timing"
+      ],
+      "verification": {
+        "kind": "source_review",
+        "runtime_execution": "not_executed",
+        "downstream_runtime_compatibility": "unverified"
+      },
+      "implementation_paths": [
+        "scripts/collect_gh.py",
+        "scripts/evaluate_validation.py"
+      ],
+      "documentation_paths": [
+        "references/09-platform-updates.md",
+        "references/08-validation-architecture.md"
+      ],
+      "test_paths": [
+        "tests/test_collection_contract.py",
+        "tests/test_validation_evidence.py"
+      ],
+      "source_urls": [
+        "https://docs.github.com/en/actions/concepts/security/github_token",
+        "https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows"
+      ]
+    },
+    {
+      "id": "github_runner_compatibility",
+      "domain": "platform",
+      "title": "Slim, ARM, larger and self-hosted runner suitability",
+      "status": "conditional",
+      "reviewed_on": "2026-11-17",
+      "version_scope": {
+        "reviewed": [
+          "Hosted/self-hosted runner documentation reviewed November 17, 2026"
+        ],
+        "target": "Unverified; inspect the installed version, plan and configuration before adoption"
+      },
+      "support_constraints": [
+        "ubuntu-slim is a single-CPU container with a 15-minute job limit and reduced capabilities",
+        "Native dependencies, images, memory, trust, cleanup, plan and pricing must be verified per runner",
+        "No runner purchase, migration or target benchmark has been performed"
+      ],
+      "verification": {
+        "kind": "source_review",
+        "runtime_execution": "not_executed",
+        "downstream_runtime_compatibility": "unverified"
+      },
+      "implementation_paths": [
+        "scripts/discover_repo.py",
+        "scripts/benchmark.py"
+      ],
+      "documentation_paths": [
+        "references/09-platform-updates.md",
+        "references/10-stack-adapters.md"
+      ],
+      "test_paths": [
+        "tests/test_discovery_contract.py",
+        "tests/test_benchmark_contract.py"
+      ],
+      "source_urls": [
+        "https://docs.github.com/en/actions/reference/runners/github-hosted-runners",
+        "https://docs.github.com/en/actions/concepts/runners/self-hosted-runners",
+        "https://docs.github.com/en/billing/reference/actions-runner-pricing"
+      ]
+    },
+    {
+      "id": "github_multicloud",
+      "domain": "platform",
+      "title": "Eligible Linux hosted runners across Azure and AWS",
+      "status": "conditional",
+      "reviewed_on": "2026-11-17",
+      "version_scope": {
+        "reviewed": [
+          "GitHub.com October 28, 2026 announcement"
+        ],
+        "target": "Unverified; inspect the installed version, plan and configuration before adoption"
+      },
+      "support_constraints": [
+        "Eligible standard and compatible larger 2-core/4-core Linux runners only",
+        "Automatic for Free/Pro/Team; Enterprise Cloud opt-in; Windows/private-networking and specialized configurations excluded",
+        "Verify effective runner/network context and current Actions IP ranges"
+      ],
+      "verification": {
+        "kind": "source_review",
+        "runtime_execution": "not_executed",
+        "downstream_runtime_compatibility": "unverified"
+      },
+      "implementation_paths": [],
+      "documentation_paths": [
+        "references/09-platform-updates.md"
+      ],
+      "test_paths": [],
+      "source_urls": [
+        "https://github.blog/changelog/2026-10-28-github-actions-adds-multi-cloud-compute-to-improve-reliability/",
+        "https://docs.github.com/en/actions/reference/runners/github-hosted-runners"
+      ]
+    },
+    {
+      "id": "cache_artifact_economics",
+      "domain": "platform",
+      "title": "Cache and artifact transfer, storage and net-benefit accounting",
+      "status": "conditional",
+      "reviewed_on": "2026-11-17",
+      "version_scope": {
+        "reviewed": [
+          "Actions cache/billing and artifact documentation reviewed November 17, 2026"
+        ],
+        "target": "Unverified; inspect the installed version, plan and configuration before adoption"
+      },
+      "support_constraints": [
+        "Default repository cache allowance is 10 GB; configured excess can incur charges",
+        "Byte volumes, hit rate, transfer durations, eviction, retention and actual billing need target observations",
+        "The helper accepts dated price inputs; it does not collect complete cache/artifact billing"
+      ],
+      "verification": {
+        "kind": "source_review",
+        "runtime_execution": "not_executed",
+        "downstream_runtime_compatibility": "unverified"
+      },
+      "implementation_paths": [
+        "scripts/analyze_gh.py"
+      ],
+      "documentation_paths": [
+        "references/09-platform-updates.md",
+        "references/10-stack-adapters.md",
+        "references/04-measurement-benchmarking.md"
+      ],
+      "test_paths": [
+        "tests/test_analysis_contract.py"
+      ],
+      "source_urls": [
+        "https://docs.github.com/en/billing/concepts/product-billing/github-actions",
+        "https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching",
+        "https://github.com/actions/upload-artifact"
+      ]
+    },
+    {
+      "id": "vitest_reports",
+      "domain": "stack",
+      "title": "Vitest 5 shard reports and preserved coverage gates",
+      "status": "conditional",
+      "reviewed_on": "2026-11-17",
+      "version_scope": {
+        "reviewed": [
+          "Vitest 5 default blob path .vitest/blob/blob-*.json"
+        ],
+        "target": "Unverified; inspect the installed version, plan and configuration before adoption"
+      },
+      "support_constraints": [
+        "Honor configured report paths and installed runner version",
+        "Require exact shard set, original shard status, merge success and original coverage thresholds",
+        "Only generic JSON transport fixtures ran; Vitest itself was not installed or executed"
+      ],
+      "verification": {
+        "kind": "source_review",
+        "runtime_execution": "not_executed",
+        "downstream_runtime_compatibility": "unverified"
+      },
+      "implementation_paths": [
+        "scripts/check_reports.py"
+      ],
+      "documentation_paths": [
+        "references/10-stack-adapters.md",
+        "references/07-config-recipes.md"
+      ],
+      "test_paths": [
+        "tests/test_report_transport.py"
+      ],
+      "source_urls": [
+        "https://vitest.dev/guide/migration/",
+        "https://vitest.dev/guide/reporters",
+        "https://vitest.dev/guide/coverage.html",
+        "https://github.com/actions/upload-artifact"
+      ]
+    },
+    {
+      "id": "vitest_transform_reuse",
+      "domain": "stack",
+      "title": "Vitest filesystem module cache and shared Vite servers",
+      "status": "conditional",
+      "reviewed_on": "2026-11-17",
+      "version_scope": {
+        "reviewed": [
+          "Vitest 5 fsModuleCache; current sharedViteServer documentation"
+        ],
+        "target": "Unverified; inspect the installed version, plan and configuration before adoption"
+      },
+      "support_constraints": [
+        "fsModuleCache defaults true and excludes Browser Mode",
+        "Plugin inputs outside tracked source/config require cache keys or opt-outs",
+        "Shared server reuse is for compatible inline projects, not all projects",
+        "Measure cold/warm phases before changing isolation or worker budgets"
+      ],
+      "verification": {
+        "kind": "source_review",
+        "runtime_execution": "not_executed",
+        "downstream_runtime_compatibility": "unverified"
+      },
+      "implementation_paths": [
+        "scripts/discover_repo.py"
+      ],
+      "documentation_paths": [
+        "references/10-stack-adapters.md"
+      ],
+      "test_paths": [
+        "tests/test_adapter_discovery.py"
+      ],
+      "source_urls": [
+        "https://vitest.dev/config/fsmodulecache",
+        "https://vitest.dev/config/sharedviteserver",
+        "https://vitest.dev/guide/profiling-test-performance"
+      ]
+    },
+    {
+      "id": "go_adapter",
+      "domain": "stack",
+      "title": "Go cache, test execution and concurrency experiments",
+      "status": "conditional",
+      "reviewed_on": "2026-11-17",
+      "version_scope": {
+        "reviewed": [
+          "Go cmd/go documentation; actions/setup-go v7"
+        ],
+        "target": "Unverified; inspect the installed version, plan and configuration before adoption"
+      },
+      "support_constraints": [
+        "Record the exact installed Go/toolchain version, CGO, race, build tags and coverage",
+        "go test -count=1 bypasses test-result reuse; distinguish this from module/build caches",
+        "Tune -p, -parallel and GOMAXPROCS separately; root go.mod is setup-go's reviewed cache-key default",
+        "No target Go suite was executed"
+      ],
+      "verification": {
+        "kind": "source_review",
+        "runtime_execution": "not_executed",
+        "downstream_runtime_compatibility": "unverified"
+      },
+      "implementation_paths": [
+        "scripts/discover_repo.py"
+      ],
+      "documentation_paths": [
+        "references/10-stack-adapters.md",
+        "references/07-config-recipes.md"
+      ],
+      "test_paths": [
+        "tests/test_adapter_discovery.py"
+      ],
+      "source_urls": [
+        "https://pkg.go.dev/cmd/go",
+        "https://github.com/actions/setup-go"
+      ]
+    },
+    {
+      "id": "next_adapter",
+      "domain": "stack",
+      "title": "Next.js cache and route type generation",
+      "status": "conditional",
+      "reviewed_on": "2026-11-17",
+      "version_scope": {
+        "reviewed": [
+          "Next.js caching and next CLI documentation reviewed November 17, 2026"
+        ],
+        "target": "Unverified; inspect the installed version, plan and configuration before adoption"
+      },
+      "support_constraints": [
+        "Record the exact installed Next version/config/router and use supported .next/cache",
+        "next typegen loads production-phase config and needs its declared environment/dependencies",
+        "Standalone type checking does not replace production application build validation"
+      ],
+      "verification": {
+        "kind": "source_review",
+        "runtime_execution": "not_executed",
+        "downstream_runtime_compatibility": "unverified"
+      },
+      "implementation_paths": [
+        "scripts/discover_repo.py"
+      ],
+      "documentation_paths": [
+        "references/10-stack-adapters.md"
+      ],
+      "test_paths": [
+        "tests/test_adapter_discovery.py"
+      ],
+      "source_urls": [
+        "https://nextjs.org/docs/app/guides/ci-build-caching",
+        "https://nextjs.org/docs/app/api-reference/cli/next"
+      ]
+    },
+    {
+      "id": "oxlint_adapter",
+      "domain": "stack",
+      "title": "Combined type-aware lint and compiler diagnostics",
+      "status": "conditional",
+      "reviewed_on": "2026-11-17",
+      "version_scope": {
+        "reviewed": [
+          "Reviewed oxlint --type-aware --type-check and tsgolint guidance"
+        ],
+        "target": "Unverified; inspect the installed version, plan and configuration before adoption"
+      },
+      "support_constraints": [
+        "Record exact Oxlint/tsgolint/TypeScript versions and rule coverage",
+        "Compare diagnostics, include/ignore scope, declaration dependencies and seeded errors",
+        "Retain unsupported framework/plugin rules and build/declaration obligations"
+      ],
+      "verification": {
+        "kind": "source_review",
+        "runtime_execution": "not_executed",
+        "downstream_runtime_compatibility": "unverified"
+      },
+      "implementation_paths": [
+        "scripts/discover_repo.py"
+      ],
+      "documentation_paths": [
+        "references/10-stack-adapters.md"
+      ],
+      "test_paths": [
+        "tests/test_adapter_discovery.py"
+      ],
+      "source_urls": [
+        "https://oxc.rs/docs/guide/usage/linter/type-aware.html"
+      ]
+    },
+    {
+      "id": "docker_adapter",
+      "domain": "stack",
+      "title": "BuildKit/GHA cache scopes and version requirements",
+      "status": "conditional",
+      "reviewed_on": "2026-11-17",
+      "version_scope": {
+        "reviewed": [
+          "Buildx >=0.21.0; BuildKit >=0.20.0 for GHA v2",
+          "Compose >=2.33.1 when used; Engine >=28.0.0 with Docker driver/containerd image store"
+        ],
+        "target": "Unverified; inspect the installed version, plan and configuration before adoption"
+      },
+      "support_constraints": [
+        "Separate image scopes, context transfer and exporter mode=min|max from GitHub cache-mode permissions",
+        "Cache mounts are not exported to GHA by default",
+        "Keep build secrets, cold correctness, compatible platforms and trusted writers explicit"
+      ],
+      "verification": {
+        "kind": "source_review",
+        "runtime_execution": "not_executed",
+        "downstream_runtime_compatibility": "unverified"
+      },
+      "implementation_paths": [
+        "scripts/discover_repo.py"
+      ],
+      "documentation_paths": [
+        "references/10-stack-adapters.md"
+      ],
+      "test_paths": [
+        "tests/test_adapter_discovery.py"
+      ],
+      "source_urls": [
+        "https://docs.docker.com/build/cache/backends/gha/",
+        "https://docs.docker.com/build/ci/github-actions/cache/"
+      ]
+    },
+    {
+      "id": "playwright_adapter",
+      "domain": "stack",
+      "title": "Playwright shard distribution and report merging",
+      "status": "conditional",
+      "reviewed_on": "2026-11-17",
+      "version_scope": {
+        "reviewed": [
+          "Playwright sharding documentation reviewed November 17, 2026"
+        ],
+        "target": "Unverified; inspect the installed version, plan and configuration before adoption"
+      },
+      "support_constraints": [
+        "Record installed version, browser/project matrix, workers, shards and setup dependencies",
+        "fullyParallel changes distribution and requires independent tests within files",
+        "Preserve each expected report, original failures and diagnostic traces"
+      ],
+      "verification": {
+        "kind": "source_review",
+        "runtime_execution": "not_executed",
+        "downstream_runtime_compatibility": "unverified"
+      },
+      "implementation_paths": [
+        "scripts/discover_repo.py"
+      ],
+      "documentation_paths": [
+        "references/10-stack-adapters.md"
+      ],
+      "test_paths": [
+        "tests/test_adapter_discovery.py"
+      ],
+      "source_urls": [
+        "https://playwright.dev/docs/test-sharding"
+      ]
+    },
+    {
+      "id": "nx_remote_cache",
+      "domain": "stack",
+      "title": "Nx deterministic task outputs and trusted remote cache reuse",
+      "status": "conditional",
+      "reviewed_on": "2026-11-17",
+      "version_scope": {
+        "reviewed": [
+          "Nx v24 remote-cache documentation reviewed November 17, 2026"
+        ],
+        "target": "Unverified; inspect the installed version, plan and configuration before adoption"
+      },
+      "support_constraints": [
+        "Validate task inputs/outputs, environment/toolchain invalidation and side effects",
+        "Isolate untrusted writes; cached logs may carry sensitive data",
+        "Preserve uncached fallback and follow deployment-artifact cache guidance",
+        "No Nx Cloud service was enabled or target task executed"
+      ],
+      "verification": {
+        "kind": "source_review",
+        "runtime_execution": "not_executed",
+        "downstream_runtime_compatibility": "unverified"
+      },
+      "implementation_paths": [
+        "scripts/discover_repo.py"
+      ],
+      "documentation_paths": [
+        "references/10-stack-adapters.md"
+      ],
+      "test_paths": [
+        "tests/test_adapter_discovery.py"
+      ],
+      "source_urls": [
+        "https://nx.dev/docs/features/ci-features/remote-cache"
+      ]
+    },
+    {
+      "id": "turbo_remote_cache",
+      "domain": "stack",
+      "title": "Turborepo deterministic remote cache and optional signatures",
+      "status": "conditional",
+      "reviewed_on": "2026-11-17",
+      "version_scope": {
+        "reviewed": [
+          "Turborepo remote-cache documentation reviewed November 17, 2026"
+        ],
+        "target": "Unverified; inspect the installed version, plan and configuration before adoption"
+      },
+      "support_constraints": [
+        "Validate deterministic outputs and input/environment hashing",
+        "HMAC artifact signatures are configurable; do not assume they are enabled",
+        "Treat failed verification as a miss and preserve uncached fallback"
+      ],
+      "verification": {
+        "kind": "source_review",
+        "runtime_execution": "not_executed",
+        "downstream_runtime_compatibility": "unverified"
+      },
+      "implementation_paths": [
+        "scripts/discover_repo.py"
+      ],
+      "documentation_paths": [
+        "references/10-stack-adapters.md"
+      ],
+      "test_paths": [
+        "tests/test_adapter_discovery.py"
+      ],
+      "source_urls": [
+        "https://turborepo.dev/docs/core-concepts/remote-caching"
+      ]
+    },
+    {
+      "id": "formatter_adapter",
+      "domain": "stack",
+      "title": "Oxfmt and Bun check-only formatter experiments",
+      "status": "conditional",
+      "reviewed_on": "2026-11-17",
+      "version_scope": {
+        "reviewed": [
+          "Oxfmt documentation; Bun 1.4.4 bun fmt --check --no-script"
+        ],
+        "target": "Unverified; inspect the installed version, plan and configuration before adoption"
+      },
+      "support_constraints": [
+        "Compare selected files, ignore rules, embedded languages, plugins and formatting output",
+        "CI check mode must not silently rewrite files",
+        "Vendor benchmarks are not measurements of this repository or a downstream project"
+      ],
+      "verification": {
+        "kind": "source_review",
+        "runtime_execution": "not_executed",
+        "downstream_runtime_compatibility": "unverified"
+      },
+      "implementation_paths": [
+        "scripts/discover_repo.py"
+      ],
+      "documentation_paths": [
+        "references/10-stack-adapters.md"
+      ],
+      "test_paths": [
+        "tests/test_adapter_discovery.py"
+      ],
+      "source_urls": [
+        "https://oxc.rs/docs/guide/usage/formatter",
+        "https://bun.com/blog/bun-v1.4.4"
+      ]
+    },
+    {
+      "id": "typescript_adapter",
+      "domain": "stack",
+      "title": "TypeScript 7 release channels and toolchain compatibility",
+      "status": "conditional",
+      "reviewed_on": "2026-11-17",
+      "version_scope": {
+        "reviewed": [
+          "TypeScript 7.0 stable release announcement July 8, 2026",
+          "TypeScript 7.1 beta announcement October 20, 2026"
+        ],
+        "target": "Unverified; inspect the installed version, plan and configuration before adoption"
+      },
+      "support_constraints": [
+        "Record exact installed version/channel; these dated announcements are not a live latest-version query",
+        "Preserve framework/compiler API, declaration, project-reference and build requirements",
+        "Migration requires target diagnostics and downstream tooling verification"
+      ],
+      "verification": {
+        "kind": "source_review",
+        "runtime_execution": "not_executed",
+        "downstream_runtime_compatibility": "unverified"
+      },
+      "implementation_paths": [
+        "scripts/discover_repo.py"
+      ],
+      "documentation_paths": [
+        "references/10-stack-adapters.md"
+      ],
+      "test_paths": [
+        "tests/test_adapter_discovery.py"
+      ],
+      "source_urls": [
+        "https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/",
+        "https://devblogs.microsoft.com/typescript/announcing-typescript-7-1-beta/"
+      ]
+    },
+    {
+      "id": "bun_checker_adapter",
+      "domain": "stack",
+      "title": "Bun embedded type checker with explicit script-dispatch control",
+      "status": "conditional",
+      "reviewed_on": "2026-11-17",
+      "version_scope": {
+        "reviewed": [
+          "Bun 1.4.4 and reviewed bun check --no-script documentation"
+        ],
+        "target": "Unverified; inspect the installed version, plan and configuration before adoption"
+      },
+      "support_constraints": [
+        "Record Bun's embedded TypeScript version separately from the project's installed compiler",
+        "Use the actual application's type environment and preserve framework/build obligations",
+        "No target Bun check or migration was executed"
+      ],
+      "verification": {
+        "kind": "source_review",
+        "runtime_execution": "not_executed",
+        "downstream_runtime_compatibility": "unverified"
+      },
+      "implementation_paths": [
+        "scripts/discover_repo.py"
+      ],
+      "documentation_paths": [
+        "references/10-stack-adapters.md"
+      ],
+      "test_paths": [
+        "tests/test_adapter_discovery.py"
+      ],
+      "source_urls": [
+        "https://bun.com/docs/runtime/check",
+        "https://bun.com/blog/bun-v1.4.4"
+      ]
+    },
+    {
+      "id": "artifact_transport_adapter",
+      "domain": "stack",
+      "title": "Artifact compression, exact identities and missing-file failure",
+      "status": "conditional",
+      "reviewed_on": "2026-11-17",
+      "version_scope": {
+        "reviewed": [
+          "actions/upload-artifact v7 documentation reviewed November 17, 2026"
+        ],
+        "target": "Unverified; inspect the installed version, plan and configuration before adoption"
+      },
+      "support_constraints": [
+        "Benchmark compression level 0 only where payload compressibility justifies it",
+        "Validate exact source/run/attempt and required files, artifact identity and digests",
+        "Keep hidden-file scope narrow and retain only policy-approved evidence"
+      ],
+      "verification": {
+        "kind": "source_review",
+        "runtime_execution": "not_executed",
+        "downstream_runtime_compatibility": "unverified"
+      },
+      "implementation_paths": [
+        "scripts/check_reports.py"
+      ],
+      "documentation_paths": [
+        "references/10-stack-adapters.md",
+        "references/07-config-recipes.md"
+      ],
+      "test_paths": [
+        "tests/test_report_transport.py"
+      ],
+      "source_urls": [
+        "https://github.com/actions/upload-artifact"
+      ]
+    },
+    {
+      "id": "toolchain_maintenance",
+      "domain": "platform",
+      "title": "Reviewed action updates and own workflow linting",
+      "status": "conditional",
+      "reviewed_on": "2026-11-17",
+      "version_scope": {
+        "reviewed": [
+          "actions/checkout v7.0.1 and actions/setup-python v7.1.0 in own CI",
+          "actionlint v1.7.12 archive with SHA-256 verification",
+          "Configured own CI Python matrix: 3.10 and 3.x"
+        ],
+        "target": "Unverified; inspect the installed version, plan and configuration before adoption"
+      },
+      "support_constraints": [
+        "A configured remote CI matrix is not evidence that the changed commit ran on GitHub",
+        "Dependabot proposes updates; adoption still requires review and target validation",
+        "Installed linters can lag native platform syntax; preserve explicit compatibility fixtures"
+      ],
+      "verification": {
+        "kind": "source_review",
+        "runtime_execution": "not_executed",
+        "downstream_runtime_compatibility": "unverified"
+      },
+      "implementation_paths": [
+        ".github/workflows/ci.yml",
+        ".github/dependabot.yml"
+      ],
+      "documentation_paths": [
+        "references/10-stack-adapters.md",
+        "references/09-platform-updates.md"
+      ],
+      "test_paths": [
+        "tests/test_skill_docs.py"
+      ],
+      "source_urls": [
+        "https://github.com/actions/checkout",
+        "https://github.com/actions/setup-python",
+        "https://github.com/actions/setup-go",
+        "https://github.com/rhysd/actionlint/releases/tag/v1.7.12",
+        "https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file"
+      ]
+    },
+    {
+      "id": "feature_register",
+      "domain": "repository",
+      "title": "Dated compatibility register and recommendation traceability",
+      "status": "implemented",
+      "reviewed_on": "2026-11-17",
+      "version_scope": {
+        "reviewed": [
+          "ci-feature-matrix/1"
+        ],
+        "target": "Python >=3.10; local fixture execution on Python 3.12.14/Linux"
+      },
+      "support_constraints": [
+        "Python standard library only",
+        "All 36 research recommendations must map to concrete repository evidence",
+        "Source review and local Python fixtures never establish downstream runtime compatibility"
+      ],
+      "verification": {
+        "kind": "python_fixtures",
+        "runtime_execution": "local_passed",
+        "downstream_runtime_compatibility": "unverified"
+      },
+      "implementation_paths": [
+        "references/feature-matrix.json"
+      ],
+      "documentation_paths": [
+        "references/06-official-sources.md",
+        "references/09-platform-updates.md",
+        "references/10-stack-adapters.md"
+      ],
+      "test_paths": [
+        "tests/test_feature_matrix.py"
+      ],
+      "source_urls": [
+        "https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax",
+        "https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/",
+        "https://bun.com/docs/runtime/check"
+      ]
+    }
+  ],
+  "recommendation_coverage": [
+    {
+      "id": "M1",
+      "title": "Use one selected population for latency and runner usage",
+      "status": "implemented",
+      "feature_ids": [
+        "collector",
+        "analyzer"
+      ],
+      "implementation_scope": "Immutable manifest selection and since filtering bind runs, jobs, attempts and usage to the same population.",
+      "remaining_target_validation": [],
+      "implementation_paths": [
+        "scripts/collect_gh.py",
+        "scripts/analyze_gh.py"
+      ],
+      "documentation_paths": [
+        "references/04-measurement-benchmarking.md",
+        "references/11-evidence-formats.md"
+      ],
+      "test_paths": [
+        "tests/test_collection_contract.py",
+        "tests/test_analysis_contract.py"
+      ],
+      "source_urls": [
+        "https://docs.github.com/en/rest/actions/workflow-runs",
+        "https://docs.github.com/en/rest/actions/workflow-jobs",
+        "https://docs.github.com/en/rest/repos/rules",
+        "https://docs.github.com/en/rest/using-the-rest-api/best-practices-for-using-the-rest-api",
+        "https://docs.github.com/en/rest/using-the-rest-api/troubleshooting-the-rest-api",
+        "https://docs.github.com/en/rest/about-the-rest-api/api-versions",
+        "https://docs.github.com/en/billing/reference/actions-runner-pricing"
+      ]
+    },
+    {
+      "id": "M2",
+      "title": "Resolve latest distinct runs and same-run attempts deterministically",
+      "status": "implemented",
+      "feature_ids": [
+        "analyzer"
+      ],
+      "implementation_scope": "Stable run chronology and event/branch/workflow identities prevent older successes from overriding newer failures.",
+      "remaining_target_validation": [],
+      "implementation_paths": [
+        "scripts/analyze_gh.py"
+      ],
+      "documentation_paths": [
+        "references/04-measurement-benchmarking.md",
+        "references/11-evidence-formats.md"
+      ],
+      "test_paths": [
+        "tests/test_analysis_contract.py"
+      ],
+      "source_urls": [
+        "https://docs.github.com/en/rest/actions/workflow-runs",
+        "https://docs.github.com/en/rest/actions/workflow-jobs",
+        "https://docs.github.com/en/rest/repos/rules",
+        "https://docs.github.com/en/billing/reference/actions-runner-pricing"
+      ]
+    },
+    {
+      "id": "M3",
+      "title": "Exclude stale payloads after a failed refetch",
+      "status": "implemented",
+      "feature_ids": [
+        "collector",
+        "analyzer"
+      ],
+      "implementation_scope": "Atomic publication and manifest-listed current payloads prevent fallback to stale job files.",
+      "remaining_target_validation": [],
+      "implementation_paths": [
+        "scripts/collect_gh.py",
+        "scripts/analyze_gh.py"
+      ],
+      "documentation_paths": [
+        "references/04-measurement-benchmarking.md",
+        "references/11-evidence-formats.md"
+      ],
+      "test_paths": [
+        "tests/test_collection_contract.py",
+        "tests/test_analysis_contract.py"
+      ],
+      "source_urls": [
+        "https://docs.github.com/en/rest/actions/workflow-runs",
+        "https://docs.github.com/en/rest/actions/workflow-jobs",
+        "https://docs.github.com/en/rest/repos/rules",
+        "https://docs.github.com/en/rest/using-the-rest-api/best-practices-for-using-the-rest-api",
+        "https://docs.github.com/en/rest/using-the-rest-api/troubleshooting-the-rest-api",
+        "https://docs.github.com/en/rest/about-the-rest-api/api-versions",
+        "https://docs.github.com/en/billing/reference/actions-runner-pricing"
+      ]
+    },
+    {
+      "id": "M4",
+      "title": "Observe actual rerun attempts and initial failure/recovery",
+      "status": "implemented",
+      "feature_ids": [
+        "collector",
+        "analyzer"
+      ],
+      "implementation_scope": "Prior attempt retrieval and attempt-aware reliability metrics preserve incomplete history as unknown.",
+      "remaining_target_validation": [],
+      "implementation_paths": [
+        "scripts/collect_gh.py",
+        "scripts/analyze_gh.py"
+      ],
+      "documentation_paths": [
+        "references/04-measurement-benchmarking.md",
+        "references/11-evidence-formats.md"
+      ],
+      "test_paths": [
+        "tests/test_collection_contract.py",
+        "tests/test_analysis_contract.py"
+      ],
+      "source_urls": [
+        "https://docs.github.com/en/rest/actions/workflow-runs",
+        "https://docs.github.com/en/rest/actions/workflow-jobs",
+        "https://docs.github.com/en/rest/repos/rules",
+        "https://docs.github.com/en/rest/using-the-rest-api/best-practices-for-using-the-rest-api",
+        "https://docs.github.com/en/rest/using-the-rest-api/troubleshooting-the-rest-api",
+        "https://docs.github.com/en/rest/about-the-rest-api/api-versions",
+        "https://docs.github.com/en/billing/reference/actions-runner-pricing"
+      ]
+    },
+    {
+      "id": "M5",
+      "title": "Preserve complete required-policy scope and identities",
+      "status": "implemented",
+      "feature_ids": [
+        "collector",
+        "analyzer"
+      ],
+      "implementation_scope": "Paginated rules, app/workflow identities, explicit protected target and source completeness retain known positives without treating inaccessible policy as absent.",
+      "remaining_target_validation": [],
+      "implementation_paths": [
+        "scripts/collect_gh.py",
+        "scripts/analyze_gh.py"
+      ],
+      "documentation_paths": [
+        "references/04-measurement-benchmarking.md",
+        "references/11-evidence-formats.md"
+      ],
+      "test_paths": [
+        "tests/test_collection_contract.py",
+        "tests/test_analysis_contract.py"
+      ],
+      "source_urls": [
+        "https://docs.github.com/en/rest/actions/workflow-runs",
+        "https://docs.github.com/en/rest/actions/workflow-jobs",
+        "https://docs.github.com/en/rest/repos/rules",
+        "https://docs.github.com/en/rest/using-the-rest-api/best-practices-for-using-the-rest-api",
+        "https://docs.github.com/en/rest/using-the-rest-api/troubleshooting-the-rest-api",
+        "https://docs.github.com/en/rest/about-the-rest-api/api-versions",
+        "https://docs.github.com/en/billing/reference/actions-runner-pricing"
+      ]
+    },
+    {
+      "id": "M6",
+      "title": "Evaluate required dependency closure instead of an incorrect floor rule",
+      "status": "implemented",
+      "feature_ids": [
+        "job_graph"
+      ],
+      "implementation_scope": "Complete explicit graphs support dependency closure, longest required paths and recomputed counterfactuals.",
+      "remaining_target_validation": [
+        "Supply the expanded target graph and actual node timing; inferred job names cannot establish dependency completeness."
+      ],
+      "implementation_paths": [
+        "scripts/graph_metrics.py",
+        "scripts/analyze_gh.py"
+      ],
+      "documentation_paths": [
+        "references/04-measurement-benchmarking.md",
+        "references/11-evidence-formats.md"
+      ],
+      "test_paths": [
+        "tests/test_analysis_contract.py"
+      ],
+      "source_urls": [
+        "https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax",
+        "https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/troubleshooting-required-status-checks"
+      ]
+    },
+    {
+      "id": "M7",
+      "title": "Clean up timed-out descendant processes",
+      "status": "implemented",
+      "feature_ids": [
+        "benchmark"
+      ],
+      "implementation_scope": "POSIX group cleanup and negative process fixtures stop later trials when cleanup is incomplete.",
+      "remaining_target_validation": [],
+      "implementation_paths": [
+        "scripts/benchmark.py"
+      ],
+      "documentation_paths": [
+        "references/04-measurement-benchmarking.md",
+        "references/11-evidence-formats.md"
+      ],
+      "test_paths": [
+        "tests/test_benchmark_contract.py"
+      ],
+      "source_urls": [
+        "https://docs.python.org/3/library/subprocess.html",
+        "https://docs.python.org/3/library/os.html#os.killpg"
+      ]
+    },
+    {
+      "id": "M8",
+      "title": "Keep warmup failures visible",
+      "status": "implemented",
+      "feature_ids": [
+        "benchmark"
+      ],
+      "implementation_scope": "Warmups are recorded with status and cleanup evidence; failures stop trials unless explicitly allowed.",
+      "remaining_target_validation": [],
+      "implementation_paths": [
+        "scripts/benchmark.py"
+      ],
+      "documentation_paths": [
+        "references/04-measurement-benchmarking.md",
+        "references/11-evidence-formats.md"
+      ],
+      "test_paths": [
+        "tests/test_benchmark_contract.py"
+      ],
+      "source_urls": [
+        "https://docs.python.org/3/library/subprocess.html",
+        "https://docs.python.org/3/library/os.html#os.killpg"
+      ]
+    },
+    {
+      "id": "M9",
+      "title": "Capture experiment provenance before execution",
+      "status": "implemented",
+      "feature_ids": [
+        "benchmark"
+      ],
+      "implementation_scope": "Source, dirty-content fingerprint and metadata snapshots precede warmup and are rechecked after execution.",
+      "remaining_target_validation": [],
+      "implementation_paths": [
+        "scripts/benchmark.py"
+      ],
+      "documentation_paths": [
+        "references/04-measurement-benchmarking.md",
+        "references/11-evidence-formats.md"
+      ],
+      "test_paths": [
+        "tests/test_benchmark_contract.py"
+      ],
+      "source_urls": [
+        "https://docs.python.org/3/library/subprocess.html",
+        "https://docs.python.org/3/library/os.html#os.killpg"
+      ]
+    },
+    {
+      "id": "M10",
+      "title": "Distinguish overlapping work from elapsed step coverage",
+      "status": "implemented",
+      "feature_ids": [
+        "analyzer",
+        "github_parallel"
+      ],
+      "implementation_scope": "Interval-union step coverage is separate from summed step work and workflow structural hints.",
+      "remaining_target_validation": [
+        "Native parallel-step execution and platform cleanup behavior require target runtime verification."
+      ],
+      "implementation_paths": [
+        "scripts/analyze_gh.py",
+        "scripts/inspect_workflows.py",
+        "scripts/discover_repo.py"
+      ],
+      "documentation_paths": [
+        "references/04-measurement-benchmarking.md",
+        "references/11-evidence-formats.md",
+        "references/09-platform-updates.md"
+      ],
+      "test_paths": [
+        "tests/test_analysis_contract.py",
+        "tests/test_workflow_semantics.py",
+        "tests/test_discovery_contract.py"
+      ],
+      "source_urls": [
+        "https://docs.github.com/en/rest/actions/workflow-runs",
+        "https://docs.github.com/en/rest/actions/workflow-jobs",
+        "https://docs.github.com/en/rest/repos/rules",
+        "https://docs.github.com/en/billing/reference/actions-runner-pricing",
+        "https://github.blog/changelog/2026-06-25-actions-steps-can-now-be-run-in-parallel/",
+        "https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax"
+      ]
+    },
+    {
+      "id": "M11",
+      "title": "Make API collection bounded, rate-aware and explicit about recall",
+      "status": "implemented_with_limits",
+      "feature_ids": [
+        "collector",
+        "github_retention"
+      ],
+      "implementation_scope": "Serial retries, timeout handling, API version, conditional ETags, date/workflow filters and truncation/retention metadata are implemented.",
+      "remaining_target_validation": [
+        "Partition larger studies into explicit server-side date/workflow windows; automatic partitioning and webhook ingestion are not implemented."
+      ],
+      "implementation_paths": [
+        "scripts/collect_gh.py",
+        "scripts/analyze_gh.py"
+      ],
+      "documentation_paths": [
+        "references/04-measurement-benchmarking.md",
+        "references/11-evidence-formats.md",
+        "references/09-platform-updates.md"
+      ],
+      "test_paths": [
+        "tests/test_collection_contract.py",
+        "tests/test_analysis_contract.py"
+      ],
+      "source_urls": [
+        "https://docs.github.com/en/rest/actions/workflow-runs",
+        "https://docs.github.com/en/rest/actions/workflow-jobs",
+        "https://docs.github.com/en/rest/repos/rules",
+        "https://docs.github.com/en/rest/using-the-rest-api/best-practices-for-using-the-rest-api",
+        "https://docs.github.com/en/rest/using-the-rest-api/troubleshooting-the-rest-api",
+        "https://docs.github.com/en/rest/about-the-rest-api/api-versions",
+        "https://github.blog/changelog/2026-10-01-actions-retention-now-covers-checks-runs-and-statuses/"
+      ]
+    },
+    {
+      "id": "M12",
+      "title": "Strengthen comparison statistics and equal-workload controls",
+      "status": "implemented_with_limits",
+      "feature_ids": [
+        "benchmark",
+        "analyzer",
+        "report_transport"
+      ],
+      "implementation_scope": "Paired trials, deterministic confidence analysis, low-sample states and explicit cohort/workload metadata are implemented.",
+      "remaining_target_validation": [
+        "Normalize runner-specific workload reports and supply equal-workload evidence; there is no universal JUnit/Go/browser report parser."
+      ],
+      "implementation_paths": [
+        "scripts/benchmark.py",
+        "scripts/analyze_gh.py",
+        "scripts/check_reports.py"
+      ],
+      "documentation_paths": [
+        "references/04-measurement-benchmarking.md",
+        "references/11-evidence-formats.md",
+        "references/07-config-recipes.md",
+        "references/10-stack-adapters.md"
+      ],
+      "test_paths": [
+        "tests/test_benchmark_contract.py",
+        "tests/test_analysis_contract.py",
+        "tests/test_report_transport.py"
+      ],
+      "source_urls": [
+        "https://docs.python.org/3/library/subprocess.html",
+        "https://docs.python.org/3/library/os.html#os.killpg",
+        "https://docs.github.com/en/rest/actions/workflow-runs",
+        "https://docs.github.com/en/rest/actions/workflow-jobs",
+        "https://docs.github.com/en/rest/repos/rules",
+        "https://docs.github.com/en/billing/reference/actions-runner-pricing",
+        "https://vitest.dev/guide/reporters",
+        "https://vitest.dev/guide/migration/",
+        "https://github.com/actions/upload-artifact"
+      ]
+    },
+    {
+      "id": "M13",
+      "title": "Separate diagnostic timing, authoritative gate evidence and pricing",
+      "status": "implemented_with_limits",
+      "feature_ids": [
+        "analyzer",
+        "validation_evaluator",
+        "job_graph"
+      ],
+      "implementation_scope": "Dated price inputs, raw/rounded usage, explicit required-gate policy and candidate-bound normalized evaluation are implemented.",
+      "remaining_target_validation": [
+        "Supply complete provider check/event correlation, verified provenance, billing context and telemetry; these are not automatically collected for every provider."
+      ],
+      "implementation_paths": [
+        "scripts/analyze_gh.py",
+        "scripts/evaluate_validation.py",
+        "scripts/graph_metrics.py"
+      ],
+      "documentation_paths": [
+        "references/04-measurement-benchmarking.md",
+        "references/11-evidence-formats.md",
+        "references/08-validation-architecture.md"
+      ],
+      "test_paths": [
+        "tests/test_analysis_contract.py",
+        "tests/test_validation_evidence.py"
+      ],
+      "source_urls": [
+        "https://docs.github.com/en/rest/actions/workflow-runs",
+        "https://docs.github.com/en/rest/actions/workflow-jobs",
+        "https://docs.github.com/en/rest/repos/rules",
+        "https://docs.github.com/en/billing/reference/actions-runner-pricing",
+        "https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/troubleshooting-required-status-checks",
+        "https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue",
+        "https://docs.github.com/en/actions/concepts/security/artifact-attestations",
+        "https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments",
+        "https://argo-rollouts.readthedocs.io/en/stable/features/analysis/",
+        "https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax"
+      ]
+    },
+    {
+      "id": "M14",
+      "title": "Reject skipped or neutral observations as unproven green",
+      "status": "implemented",
+      "feature_ids": [
+        "analyzer",
+        "validation_evaluator"
+      ],
+      "implementation_scope": "Diagnostic proxies and policy evaluation require explicit current successful evidence; an intentional skip requires its own verified contract.",
+      "remaining_target_validation": [],
+      "implementation_paths": [
+        "scripts/analyze_gh.py",
+        "scripts/evaluate_validation.py"
+      ],
+      "documentation_paths": [
+        "references/04-measurement-benchmarking.md",
+        "references/11-evidence-formats.md",
+        "references/08-validation-architecture.md"
+      ],
+      "test_paths": [
+        "tests/test_analysis_contract.py",
+        "tests/test_validation_evidence.py"
+      ],
+      "source_urls": [
+        "https://docs.github.com/en/rest/actions/workflow-runs",
+        "https://docs.github.com/en/rest/actions/workflow-jobs",
+        "https://docs.github.com/en/rest/repos/rules",
+        "https://docs.github.com/en/billing/reference/actions-runner-pricing",
+        "https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/troubleshooting-required-status-checks",
+        "https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue",
+        "https://docs.github.com/en/actions/concepts/security/artifact-attestations",
+        "https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments",
+        "https://argo-rollouts.readthedocs.io/en/stable/features/analysis/"
+      ]
+    },
+    {
+      "id": "G1",
+      "title": "Support native parallel/background workflow reasoning",
+      "status": "conditional",
+      "feature_ids": [
+        "github_parallel"
+      ],
+      "implementation_scope": "Discovery, recursive JSON inspection, overlap metrics and migration gates are implemented; native platform execution remains unverified.",
+      "remaining_target_validation": [],
+      "implementation_paths": [
+        "scripts/inspect_workflows.py",
+        "scripts/discover_repo.py",
+        "scripts/analyze_gh.py"
+      ],
+      "documentation_paths": [
+        "references/09-platform-updates.md",
+        "references/04-measurement-benchmarking.md"
+      ],
+      "test_paths": [
+        "tests/test_workflow_semantics.py",
+        "tests/test_discovery_contract.py",
+        "tests/test_analysis_contract.py"
+      ],
+      "source_urls": [
+        "https://github.blog/changelog/2026-06-25-actions-steps-can-now-be-run-in-parallel/",
+        "https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax"
+      ]
+    },
+    {
+      "id": "G2",
+      "title": "Model service-enforced cache access",
+      "status": "conditional",
+      "feature_ids": [
+        "github_cache_access"
+      ],
+      "implementation_scope": "Explicit mode sets and caller-limit validation are implemented in the advisory inspector; service enforcement must be checked on target.",
+      "remaining_target_validation": [],
+      "implementation_paths": [
+        "scripts/inspect_workflows.py",
+        "scripts/discover_repo.py"
+      ],
+      "documentation_paths": [
+        "references/09-platform-updates.md"
+      ],
+      "test_paths": [
+        "tests/test_workflow_semantics.py",
+        "tests/test_discovery_contract.py"
+      ],
+      "source_urls": [
+        "https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching"
+      ]
+    },
+    {
+      "id": "G3",
+      "title": "Recognize action lockfiles and immutable dependency identities",
+      "status": "conditional",
+      "feature_ids": [
+        "github_action_lockfiles"
+      ],
+      "implementation_scope": "Static identity/lockfile checks and plan-qualified generation guidance are implemented; live reachability and complete expansion remain unverified.",
+      "remaining_target_validation": [],
+      "implementation_paths": [
+        "scripts/inspect_workflows.py",
+        "scripts/discover_repo.py"
+      ],
+      "documentation_paths": [
+        "references/09-platform-updates.md",
+        "references/03-security-correctness.md"
+      ],
+      "test_paths": [
+        "tests/test_workflow_semantics.py",
+        "tests/test_discovery_contract.py"
+      ],
+      "source_urls": [
+        "https://docs.github.com/en/actions/concepts/security/workflow-dependency-lockfiles",
+        "https://docs.github.com/en/actions/how-tos/secure-your-work/lock-workflow-dependencies",
+        "https://github.com/github/actions-lockfile",
+        "https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax"
+      ]
+    },
+    {
+      "id": "G4",
+      "title": "Choose concurrency by workflow purpose",
+      "status": "conditional",
+      "feature_ids": [
+        "github_concurrency"
+      ],
+      "implementation_scope": "Static queue incompatibilities and integration freshness/starvation evidence are checked; actual scheduling and branch policy require target validation.",
+      "remaining_target_validation": [],
+      "implementation_paths": [
+        "scripts/inspect_workflows.py",
+        "scripts/discover_repo.py",
+        "scripts/evaluate_validation.py"
+      ],
+      "documentation_paths": [
+        "references/09-platform-updates.md",
+        "references/08-validation-architecture.md"
+      ],
+      "test_paths": [
+        "tests/test_workflow_semantics.py",
+        "tests/test_discovery_contract.py",
+        "tests/test_validation_evidence.py"
+      ],
+      "source_urls": [
+        "https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency",
+        "https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue"
+      ]
+    },
+    {
+      "id": "G5",
+      "title": "Prepare for the public privileged-trigger default change",
+      "status": "conditional",
+      "feature_ids": [
+        "github_public_privileged_trigger"
+      ],
+      "implementation_scope": "Dated applicability and review instructions are documented; no policy bypass or privileged-trigger conversion was enabled.",
+      "remaining_target_validation": [],
+      "implementation_paths": [
+        "scripts/discover_repo.py"
+      ],
+      "documentation_paths": [
+        "references/09-platform-updates.md",
+        "references/03-security-correctness.md"
+      ],
+      "test_paths": [
+        "tests/test_discovery_contract.py"
+      ],
+      "source_urls": [
+        "https://github.blog/changelog/2026-11-02-pull_request_target-blocked-by-default-december-2/"
+      ]
+    },
+    {
+      "id": "G6",
+      "title": "Keep retention loss and collection completeness explicit",
+      "status": "implemented_with_limits",
+      "feature_ids": [
+        "github_retention",
+        "collector"
+      ],
+      "implementation_scope": "Snapshot and gap metadata are implemented; retention settings and deleted provider evidence remain outside local reconstruction.",
+      "remaining_target_validation": [],
+      "implementation_paths": [
+        "scripts/collect_gh.py",
+        "scripts/analyze_gh.py"
+      ],
+      "documentation_paths": [
+        "references/09-platform-updates.md",
+        "references/04-measurement-benchmarking.md",
+        "references/11-evidence-formats.md"
+      ],
+      "test_paths": [
+        "tests/test_collection_contract.py",
+        "tests/test_analysis_contract.py"
+      ],
+      "source_urls": [
+        "https://github.blog/changelog/2026-10-01-actions-retention-now-covers-checks-runs-and-statuses/",
+        "https://docs.github.com/en/rest/actions/workflow-runs",
+        "https://docs.github.com/en/rest/actions/workflow-jobs",
+        "https://docs.github.com/en/rest/repos/rules",
+        "https://docs.github.com/en/rest/using-the-rest-api/best-practices-for-using-the-rest-api",
+        "https://docs.github.com/en/rest/using-the-rest-api/troubleshooting-the-rest-api",
+        "https://docs.github.com/en/rest/about-the-rest-api/api-versions"
+      ]
+    },
+    {
+      "id": "G7",
+      "title": "Separate approval wait from runner queue",
+      "status": "conditional",
+      "feature_ids": [
+        "github_approval_wait"
+      ],
+      "implementation_scope": "Incomplete-run collection and normalized feedback evidence are available; approval attribution needs provider event evidence.",
+      "remaining_target_validation": [],
+      "implementation_paths": [
+        "scripts/collect_gh.py",
+        "scripts/evaluate_validation.py"
+      ],
+      "documentation_paths": [
+        "references/09-platform-updates.md",
+        "references/08-validation-architecture.md"
+      ],
+      "test_paths": [
+        "tests/test_collection_contract.py",
+        "tests/test_validation_evidence.py"
+      ],
+      "source_urls": [
+        "https://docs.github.com/en/actions/concepts/security/github_token",
+        "https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows"
+      ]
+    },
+    {
+      "id": "G8",
+      "title": "Evaluate lightweight and architecture-aware runners",
+      "status": "conditional",
+      "feature_ids": [
+        "github_runner_compatibility"
+      ],
+      "implementation_scope": "Runner compatibility requirements and controlled experiments are documented; no runner migration or target performance claim is made.",
+      "remaining_target_validation": [],
+      "implementation_paths": [
+        "scripts/discover_repo.py",
+        "scripts/benchmark.py"
+      ],
+      "documentation_paths": [
+        "references/09-platform-updates.md",
+        "references/10-stack-adapters.md"
+      ],
+      "test_paths": [
+        "tests/test_discovery_contract.py",
+        "tests/test_benchmark_contract.py"
+      ],
+      "source_urls": [
+        "https://docs.github.com/en/actions/reference/runners/github-hosted-runners",
+        "https://docs.github.com/en/actions/concepts/runners/self-hosted-runners",
+        "https://docs.github.com/en/billing/reference/actions-runner-pricing"
+      ]
+    },
+    {
+      "id": "G9",
+      "title": "Account for expanded hosted-runner infrastructure",
+      "status": "conditional",
+      "feature_ids": [
+        "github_multicloud"
+      ],
+      "implementation_scope": "Dated eligibility, plan scope and egress verification are documented; actual cloud placement must be observed.",
+      "remaining_target_validation": [],
+      "implementation_paths": [],
+      "documentation_paths": [
+        "references/09-platform-updates.md"
+      ],
+      "test_paths": [],
+      "source_urls": [
+        "https://github.blog/changelog/2026-10-28-github-actions-adds-multi-cloud-compute-to-improve-reliability/",
+        "https://docs.github.com/en/actions/reference/runners/github-hosted-runners"
+      ]
+    },
+    {
+      "id": "G10",
+      "title": "Measure cache and artifact economics",
+      "status": "conditional",
+      "feature_ids": [
+        "cache_artifact_economics",
+        "artifact_transport_adapter"
+      ],
+      "implementation_scope": "Cost input support and transfer/storage decision procedures are implemented; full cache/artifact usage and invoices require target evidence.",
+      "remaining_target_validation": [],
+      "implementation_paths": [
+        "scripts/analyze_gh.py",
+        "scripts/check_reports.py"
+      ],
+      "documentation_paths": [
+        "references/09-platform-updates.md",
+        "references/10-stack-adapters.md",
+        "references/04-measurement-benchmarking.md",
+        "references/07-config-recipes.md"
+      ],
+      "test_paths": [
+        "tests/test_analysis_contract.py",
+        "tests/test_report_transport.py"
+      ],
+      "source_urls": [
+        "https://docs.github.com/en/billing/concepts/product-billing/github-actions",
+        "https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching",
+        "https://github.com/actions/upload-artifact"
+      ]
+    },
+    {
+      "id": "T1",
+      "title": "Correct Vitest 5 report transport and preserve merge gates",
+      "status": "conditional",
+      "feature_ids": [
+        "vitest_reports",
+        "report_transport"
+      ],
+      "implementation_scope": "Recipe paths and generic shard transport validation are implemented; the target Vitest merge and coverage gates must execute.",
+      "remaining_target_validation": [],
+      "implementation_paths": [
+        "scripts/check_reports.py"
+      ],
+      "documentation_paths": [
+        "references/10-stack-adapters.md",
+        "references/07-config-recipes.md"
+      ],
+      "test_paths": [
+        "tests/test_report_transport.py"
+      ],
+      "source_urls": [
+        "https://vitest.dev/guide/migration/",
+        "https://vitest.dev/guide/reporters",
+        "https://vitest.dev/guide/coverage.html",
+        "https://github.com/actions/upload-artifact"
+      ]
+    },
+    {
+      "id": "T2",
+      "title": "Prefer measured transform reuse before reducing test isolation",
+      "status": "conditional",
+      "feature_ids": [
+        "vitest_transform_reuse",
+        "discovery"
+      ],
+      "implementation_scope": "Positive adapter routing and version-qualified cache/server experiments are documented; target invalidation and test independence remain unverified.",
+      "remaining_target_validation": [],
+      "implementation_paths": [
+        "scripts/discover_repo.py"
+      ],
+      "documentation_paths": [
+        "references/10-stack-adapters.md",
+        "references/01-discovery-matrix.md",
+        "references/08-validation-architecture.md"
+      ],
+      "test_paths": [
+        "tests/test_adapter_discovery.py",
+        "tests/test_discovery_contract.py"
+      ],
+      "source_urls": [
+        "https://vitest.dev/config/fsmodulecache",
+        "https://vitest.dev/config/sharedviteserver",
+        "https://vitest.dev/guide/profiling-test-performance",
+        "https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows",
+        "https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax",
+        "https://nx.dev/docs/features/ci-features/affected"
+      ]
+    },
+    {
+      "id": "T3",
+      "title": "Add a Go-specific cache and concurrency adapter",
+      "status": "conditional",
+      "feature_ids": [
+        "go_adapter",
+        "discovery"
+      ],
+      "implementation_scope": "Positive repository detection and Go experiment/gate/fallback guidance are implemented; no Go suite was run.",
+      "remaining_target_validation": [],
+      "implementation_paths": [
+        "scripts/discover_repo.py"
+      ],
+      "documentation_paths": [
+        "references/10-stack-adapters.md",
+        "references/07-config-recipes.md",
+        "references/01-discovery-matrix.md",
+        "references/08-validation-architecture.md"
+      ],
+      "test_paths": [
+        "tests/test_adapter_discovery.py",
+        "tests/test_discovery_contract.py"
+      ],
+      "source_urls": [
+        "https://pkg.go.dev/cmd/go",
+        "https://github.com/actions/setup-go",
+        "https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows",
+        "https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax",
+        "https://nx.dev/docs/features/ci-features/affected"
+      ]
+    },
+    {
+      "id": "T4",
+      "title": "Add a Next.js cache and type-generation adapter",
+      "status": "conditional",
+      "feature_ids": [
+        "next_adapter",
+        "discovery"
+      ],
+      "implementation_scope": "Positive Next detection and cache/typegen/build guidance are implemented; no application build was run.",
+      "remaining_target_validation": [],
+      "implementation_paths": [
+        "scripts/discover_repo.py"
+      ],
+      "documentation_paths": [
+        "references/10-stack-adapters.md",
+        "references/01-discovery-matrix.md",
+        "references/08-validation-architecture.md"
+      ],
+      "test_paths": [
+        "tests/test_adapter_discovery.py",
+        "tests/test_discovery_contract.py"
+      ],
+      "source_urls": [
+        "https://nextjs.org/docs/app/guides/ci-build-caching",
+        "https://nextjs.org/docs/app/api-reference/cli/next",
+        "https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows",
+        "https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax",
+        "https://nx.dev/docs/features/ci-features/affected"
+      ]
+    },
+    {
+      "id": "T5",
+      "title": "Evaluate combined typed lint and type checking",
+      "status": "conditional",
+      "feature_ids": [
+        "oxlint_adapter",
+        "discovery"
+      ],
+      "implementation_scope": "The adapter preserves diagnostics, declaration and framework checks; no target gate was removed.",
+      "remaining_target_validation": [],
+      "implementation_paths": [
+        "scripts/discover_repo.py"
+      ],
+      "documentation_paths": [
+        "references/10-stack-adapters.md",
+        "references/01-discovery-matrix.md",
+        "references/08-validation-architecture.md"
+      ],
+      "test_paths": [
+        "tests/test_adapter_discovery.py",
+        "tests/test_discovery_contract.py"
+      ],
+      "source_urls": [
+        "https://oxc.rs/docs/guide/usage/linter/type-aware.html",
+        "https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows",
+        "https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax",
+        "https://nx.dev/docs/features/ci-features/affected"
+      ]
+    },
+    {
+      "id": "T6",
+      "title": "Add Docker/BuildKit cache experiments",
+      "status": "conditional",
+      "feature_ids": [
+        "docker_adapter",
+        "discovery"
+      ],
+      "implementation_scope": "Context, image scope, backend/version and cache-mount guidance is implemented; no target container build was run.",
+      "remaining_target_validation": [],
+      "implementation_paths": [
+        "scripts/discover_repo.py"
+      ],
+      "documentation_paths": [
+        "references/10-stack-adapters.md",
+        "references/01-discovery-matrix.md",
+        "references/08-validation-architecture.md"
+      ],
+      "test_paths": [
+        "tests/test_adapter_discovery.py",
+        "tests/test_discovery_contract.py"
+      ],
+      "source_urls": [
+        "https://docs.docker.com/build/cache/backends/gha/",
+        "https://docs.docker.com/build/ci/github-actions/cache/",
+        "https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows",
+        "https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax",
+        "https://nx.dev/docs/features/ci-features/affected"
+      ]
+    },
+    {
+      "id": "T7",
+      "title": "Add Playwright sharding, setup and reporting guidance",
+      "status": "conditional",
+      "feature_ids": [
+        "playwright_adapter",
+        "discovery"
+      ],
+      "implementation_scope": "Project detection and coverage-preserving experiment guidance are implemented; browser test execution remains unverified.",
+      "remaining_target_validation": [],
+      "implementation_paths": [
+        "scripts/discover_repo.py"
+      ],
+      "documentation_paths": [
+        "references/10-stack-adapters.md",
+        "references/01-discovery-matrix.md",
+        "references/08-validation-architecture.md"
+      ],
+      "test_paths": [
+        "tests/test_adapter_discovery.py",
+        "tests/test_discovery_contract.py"
+      ],
+      "source_urls": [
+        "https://playwright.dev/docs/test-sharding",
+        "https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows",
+        "https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax",
+        "https://nx.dev/docs/features/ci-features/affected"
+      ]
+    },
+    {
+      "id": "T8",
+      "title": "Separate dependency caches from remote task-output caches",
+      "status": "conditional",
+      "feature_ids": [
+        "nx_remote_cache",
+        "turbo_remote_cache",
+        "discovery"
+      ],
+      "implementation_scope": "Task determinism, trusted writers, signatures where supported and uncached fallback are documented; no remote cache was enabled.",
+      "remaining_target_validation": [],
+      "implementation_paths": [
+        "scripts/discover_repo.py"
+      ],
+      "documentation_paths": [
+        "references/10-stack-adapters.md",
+        "references/01-discovery-matrix.md",
+        "references/08-validation-architecture.md"
+      ],
+      "test_paths": [
+        "tests/test_adapter_discovery.py",
+        "tests/test_discovery_contract.py"
+      ],
+      "source_urls": [
+        "https://nx.dev/docs/features/ci-features/remote-cache",
+        "https://turborepo.dev/docs/core-concepts/remote-caching",
+        "https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows",
+        "https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax",
+        "https://nx.dev/docs/features/ci-features/affected"
+      ]
+    },
+    {
+      "id": "T9",
+      "title": "Treat formatting as a measured native-tool candidate",
+      "status": "conditional",
+      "feature_ids": [
+        "formatter_adapter",
+        "discovery"
+      ],
+      "implementation_scope": "Formatter detection and check-only equivalence gates are implemented; no formatter migration was applied.",
+      "remaining_target_validation": [],
+      "implementation_paths": [
+        "scripts/discover_repo.py"
+      ],
+      "documentation_paths": [
+        "references/10-stack-adapters.md",
+        "references/01-discovery-matrix.md",
+        "references/08-validation-architecture.md"
+      ],
+      "test_paths": [
+        "tests/test_adapter_discovery.py",
+        "tests/test_discovery_contract.py"
+      ],
+      "source_urls": [
+        "https://oxc.rs/docs/guide/usage/formatter",
+        "https://bun.com/blog/bun-v1.4.4",
+        "https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows",
+        "https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax",
+        "https://nx.dev/docs/features/ci-features/affected"
+      ]
+    },
+    {
+      "id": "T10",
+      "title": "Replace broad version prose with a dated compatibility register",
+      "status": "implemented_with_limits",
+      "feature_ids": [
+        "feature_register",
+        "typescript_adapter",
+        "bun_checker_adapter"
+      ],
+      "implementation_scope": "This register, validation tests and explicit compiler/checker version scope are implemented.",
+      "remaining_target_validation": [
+        "Re-open dated sources and run target framework/compiler/plugin compatibility tests before migration."
+      ],
+      "implementation_paths": [
+        "references/feature-matrix.json",
+        "scripts/discover_repo.py"
+      ],
+      "documentation_paths": [
+        "references/06-official-sources.md",
+        "references/09-platform-updates.md",
+        "references/10-stack-adapters.md"
+      ],
+      "test_paths": [
+        "tests/test_feature_matrix.py",
+        "tests/test_adapter_discovery.py"
+      ],
+      "source_urls": [
+        "https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax",
+        "https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/",
+        "https://bun.com/docs/runtime/check",
+        "https://devblogs.microsoft.com/typescript/announcing-typescript-7-1-beta/",
+        "https://bun.com/blog/bun-v1.4.4"
+      ]
+    },
+    {
+      "id": "T11",
+      "title": "Make artifact transport a performance decision",
+      "status": "conditional",
+      "feature_ids": [
+        "artifact_transport_adapter",
+        "report_transport"
+      ],
+      "implementation_scope": "Explicit identity, missing-file failure and transport validation are implemented; compression gains and complete consumer equivalence require target measurements.",
+      "remaining_target_validation": [],
+      "implementation_paths": [
+        "scripts/check_reports.py"
+      ],
+      "documentation_paths": [
+        "references/10-stack-adapters.md",
+        "references/07-config-recipes.md"
+      ],
+      "test_paths": [
+        "tests/test_report_transport.py"
+      ],
+      "source_urls": [
+        "https://github.com/actions/upload-artifact",
+        "https://vitest.dev/guide/reporters",
+        "https://vitest.dev/guide/migration/"
+      ]
+    },
+    {
+      "id": "T12",
+      "title": "Keep actions, workflow lint and toolchain maintenance current",
+      "status": "implemented_with_limits",
+      "feature_ids": [
+        "toolchain_maintenance",
+        "feature_register"
+      ],
+      "implementation_scope": "Own workflow lint, reviewed action pins, Dependabot configuration and compatibility inventory are present.",
+      "remaining_target_validation": [
+        "Run the changed commit in GitHub CI and review future updates; local tests do not prove every downstream action/tool runtime."
+      ],
+      "implementation_paths": [
+        ".github/workflows/ci.yml",
+        ".github/dependabot.yml",
+        "references/feature-matrix.json"
+      ],
+      "documentation_paths": [
+        "references/10-stack-adapters.md",
+        "references/09-platform-updates.md",
+        "references/06-official-sources.md"
+      ],
+      "test_paths": [
+        "tests/test_skill_docs.py",
+        "tests/test_feature_matrix.py"
+      ],
+      "source_urls": [
+        "https://github.com/actions/checkout",
+        "https://github.com/actions/setup-python",
+        "https://github.com/actions/setup-go",
+        "https://github.com/rhysd/actionlint/releases/tag/v1.7.12",
+        "https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file",
+        "https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax",
+        "https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/",
+        "https://bun.com/docs/runtime/check"
+      ]
+    }
+  ]
+}

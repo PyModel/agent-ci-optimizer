@@ -136,11 +136,13 @@ class CollectGhTest(unittest.TestCase):
         })
         with tempfile.TemporaryDirectory() as d:
             meta = collect_gh.collect(gh, "o/r", 150, Path(d))
-            runs = json.loads((Path(d) / "raw/runs.json").read_text())
-            required = json.loads((Path(d) / "raw/required_checks.json").read_text())
+            pointer = json.loads((Path(d) / "current.json").read_text())
+            raw = Path(d) / pointer["snapshot_path"] / "raw"
+            runs = json.loads((raw / "runs.json").read_text())
+            required = json.loads((raw / "required_checks.json").read_text())
         self.assertEqual(len(runs), 150)
         self.assertEqual(meta["runs_with_jobs"], 149)
-        self.assertTrue(any("jobs 7" in e for e in meta["errors"]))
+        self.assertTrue(any(e["stage"] == "jobs" and e.get("run_id") == 7 for e in meta["errors"]))
         self.assertEqual(required["branch"], "trunk")
         self.assertEqual([r["type"] for r in required["rulesets"]], ["required_status_checks"])
         self.assertIn("unavailable", required["classic_protection"])
@@ -199,7 +201,7 @@ class AnalyzeGhTest(unittest.TestCase):
         self.assertEqual(g["setup_share"]["p50"], 0.25)
         self.assertEqual(g["rerun_rate"]["value"], round(1 / 3, 4))
         self.assertEqual(g["jobs_missing_for_runs"], 1)
-        self.assertEqual(m["flaky_sha_rate"]["num"], 1)
+        self.assertEqual(m["flaky_sha_rate"], "unknown")  # no real same-run attempt history
         self.assertEqual(m["cache_hit_rate"], "unknown")
         self.assertIsInstance(m["push_to_green_s"], dict)
 
@@ -212,14 +214,16 @@ class AnalyzeGhTest(unittest.TestCase):
                           for n, m in (("test", 8), ("lint", 5))] for r in runs}
         jobs[4][0]["completed_at"] = "2026-10-01T01:40:00Z"  # one 60-min outlier
         g = analyze_gh.analyze(runs, jobs, {}, {"test"})["workflows"]["CI [pull_request]"]
-        self.assertEqual(g["last_finishing_job"], {"test": {"runs": 4, "required": True}})
+        self.assertEqual(g["last_finishing_job"], {"test": {"runs": 3, "required": True,
+                                                          "match_basis": "context name only"}})
         self.assertEqual(g["gap_to_runner_up_s"]["n"], 3)  # the failed run is not a floor sample
         self.assertEqual(g["gap_to_runner_up_s"]["p50"], 180.0)  # 8 min - 5 min
         self.assertTrue(analyze_gh.dist([1, 1, 1, 10])["heavy_tail"])
         self.assertNotIn("heavy_tail", analyze_gh.dist([1, 1, 1, 2]))
         m = analyze_gh.analyze(runs, jobs, {})
         fp = m["first_pass_failure_rate"]
-        self.assertEqual((fp["num"], fp["den"], fp["time_to_green_multiplier"]), (2, 4, 2.0))
+        self.assertEqual((fp["num"], fp["den"]), (1, 3))  # unknown first attempt excluded
+        self.assertNotIn("time_to_green_multiplier", fp)
         self.assertEqual(m["required_checks"], "unknown")
         self.assertEqual(m["workflows"]["CI [pull_request]"]["last_finishing_job"]["test"]["required"], "unknown")
 
@@ -228,8 +232,8 @@ class AnalyzeGhTest(unittest.TestCase):
         rules = [{"type": "required_status_checks", "parameters": {"required_status_checks": [{"context": "ci"}]}}]
         self.assertEqual(rc({"classic_protection": {"contexts": ["a"], "checks": [{"context": "b"}]}, "rulesets": rules}),
                          {"a", "b", "ci"})
-        self.assertEqual(rc({"classic_protection": {"unavailable": "HTTP 404"}, "rulesets": []}), set())
-        self.assertIsNone(rc({"classic_protection": {"unavailable": "HTTP 403"}, "rulesets": rules}))
+        self.assertIsNone(rc({"classic_protection": {"unavailable": "HTTP 404"}, "rulesets": []}))
+        self.assertEqual(rc({"classic_protection": {"unavailable": "HTTP 403"}, "rulesets": rules}), {"ci"})
         self.assertIsNone(rc({"classic_protection": {"unavailable": "HTTP 404"}, "rulesets": {"unavailable": "x"}}))
 
     def test_since_filters_runs_and_rejects_naive_time(self):
@@ -274,13 +278,15 @@ class BenchmarkTest(unittest.TestCase):
             base = Path(d) / "base.json"
             base.write_text(json.dumps(res))
             rc, res2 = self.run_bench("--baseline", str(base))
-        self.assertIn("p50_delta_pct", res2["comparison"])
+        self.assertFalse(res2["comparison"]["comparable"])
+        self.assertEqual(res2["comparison"]["decision"], "INSUFFICIENT EVIDENCE")
+        self.assertNotIn("p50_delta_pct", res2["comparison"])
         self.assertTrue(any("fewer than" in w for w in res2["comparison"]["warnings"]))
 
     def test_failure_exits_nonzero(self):
         rc, res = self.run_bench(code="raise SystemExit(3)")
         self.assertEqual(rc, 1)
-        self.assertEqual(res["failures"], 3)
+        self.assertEqual(res["failures"], 1)  # stop before a failed trial contaminates later samples
         self.assertEqual(res["summary"]["n"], 0)
 
     def test_rejects_zero_runs_and_missing_command(self):

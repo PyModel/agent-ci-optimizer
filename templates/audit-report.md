@@ -14,7 +14,7 @@ Mode: OBSERVE · Window: <from> → <to> · Sample: <n> runs (<m> with jobs) · 
 | Languages / package manager | | |
 | Monorepo graph | none / Nx / Turbo / … | |
 | Test runners | | |
-| Required checks | | `raw/required_checks.json` |
+| Required checks | | current snapshot's `raw/required_checks.json`; source completeness/app identity |
 | Trust boundaries | fork PRs? `pull_request_target`? deploy jobs? | |
 
 ## Four validation categories
@@ -47,6 +47,11 @@ Timestamp provenance: <provider push events / explicitly named proxy / unavailab
 
 ## Baseline
 
+Snapshot ID/hash manifest: <path/identity>. Enumeration and retention limits:
+<complete within selected query / capped / unknown>. Cohort identity: <event,
+workflow/config, runner, trust, cache, workload>. Failed fetches and missing attempt
+history: <counts and effect>. Normalized dependency graph: <source/expansion proof>.
+
 | Metric | p50 | p95 | n | Definition / limitation |
 |---|---|---|---|---|
 | analyzer push→green proxy | | | | approximation, not a substitute for the PR objective above |
@@ -54,7 +59,7 @@ Timestamp provenance: <provider push events / explicitly named proxy / unavailab
 | job queue | | | | |
 | setup share | | | | |
 | shard skew | | | | |
-| flake rate | | | | |
+| suspected same-run retry recovery | | | | logs distinguish flakiness, repair and intentional reruns |
 | first-pass failure rate | | | | verify attempts; separate intentional reruns and repair delay |
 | gap to runner-up job | | | | observational only; dependency-path recomputation determines possible saving |
 | cache hit rate | unknown | | | needs logs |
@@ -85,6 +90,8 @@ Combined wall-clock saving (stacked model, not the sum of rows): <value>; method
 - Release plan: <flag states and staged exposure with telemetry thresholds/window/minimum samples/abort owner, or package/staging/consumer compatibility gates>.
 - Migration/data effects: <compatibility, recovery or roll-forward proof; feature flags alone insufficient>.
 - Release/deploy/publish authorization: <existing scope or required separate action; gate success alone grants none>.
+- Evaluation result: <policy fingerprint, evidence observation age, requested result and exact status>. Use `--require` when consuming an evaluator result as a gate; successful report generation alone is not validation success.
+- Rollout identity: <deployment ID, environment, active-stage activation time; telemetry window after activation; comparable baseline proof when relative thresholds are used>.
 
 ## Migration proof
 

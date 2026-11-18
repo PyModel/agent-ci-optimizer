@@ -1,0 +1,12 @@
+{
+  "schema": "ci-cohort-context/1",
+  "runs": {
+    "123": {
+      "trust": "trusted-push",
+      "config": "workflow-content-sha256",
+      "cache": "cold",
+      "workload": "full-suite-manifest-sha256",
+      "runner_class": "linux-x64-2cpu"
+    }
+  }
+}

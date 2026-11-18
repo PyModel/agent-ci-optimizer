@@ -7,6 +7,12 @@ frequency or moving integrated verification is a policy/scheduling change; measu
 separately from making an unchanged workload execute faster. A small, cheap full suite
 may remain the best PR change check.
 
+The [stack adapters](10-stack-adapters.md) extend these modules to Go, Next.js,
+Vitest transform reuse/report completeness, combined typed lint, formatting,
+Docker/BuildKit, Playwright, remote task caches and artifact transport. The
+[platform guide](09-platform-updates.md) covers current cache/lockfile/parallel/
+queue semantics. Read the dated feature matrix before assuming target support.
+
 ## 1. Fast runners
 
 **Applies when** CPU- or I/O-bound jobs dominate the critical path, or queue p95 is high on the current pool.
@@ -27,7 +33,7 @@ may remain the best PR change check.
 
 **Oxlint.** Rust linter with ~870 built-in rules covering ESLint core, TypeScript, React, Jest, Vitest, Import, Unicorn, jsx-a11y. Type-aware linting exists; JS plugins are alpha. Migration paths: `@oxlint/migrate` to replace ESLint, or run Oxlint first and keep ESLint for the rest with `eslint-plugin-oxlint` turning off overlapping rules.
 
-**Typecheck.** TypeScript 7.0 (stable 2026-07-08) is the native port and ships as `tsc` in the `typescript` package; `tsgo` / `@typescript/native-preview` are the old preview names. It has no compiler API yet (typescript-eslint needs `@typescript/typescript6`, which provides `tsc6`), errors on 6.0-deprecated options (`target: es5`, `baseUrl`, `moduleResolution: node10`, AMD/UMD/System), and defaults `types` to `[]`. Bun ≥1.4.3 has `bun check`, a type checker; `bun check --no-script` always runs the checker even when `package.json` defines a `check` script, and accepts checker flags (`-b`). It needs `@types/bun`.
+**Typecheck.** TypeScript 7.0 (stable 2026-07-08) is the native port and ships as `tsc` in the `typescript` package; `tsgo` / `@typescript/native-preview` are the old preview names. Its 7.0 compiler API and deprecated-option compatibility differ from prior releases; preserve the required TS 6 integration where needed. Treat the separately published 7.1 beta as a different compatibility target. Bun ≥1.4.3 has `bun check`; `bun check --no-script` selects the checker even when a package has a `check` script. Record the embedded compiler and type environment; check-only, build and declaration-output obligations remain distinct.
 
 **Experiment.** Run old and new side by side on the same commit; diff the diagnostic sets (rule id + file + line), not only exit codes. For typecheck, compare error counts per project and confirm declaration output (`--emitDeclarationOnly` diff of `.d.ts`) is byte-identical if packages publish types.
 
