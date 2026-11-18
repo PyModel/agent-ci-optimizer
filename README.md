@@ -1,4 +1,4 @@
-# agent-ci-optimizer
+# ![Agent CI Optimizer](assets/banner.svg)
 
 An agent skill that makes CI faster without making it lie. It audits a repo's
 push → trustworthy green → merge loop, measures where the time goes, and proposes one
