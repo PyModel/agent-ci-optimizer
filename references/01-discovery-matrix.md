@@ -1,5 +1,16 @@
 # Discovery matrix
 
+`discover_repo.py` also emits `adapter_candidates`: positive filename/dependency
+evidence routes an agent to the [stack adapters](10-stack-adapters.md). A candidate
+does not establish version support, measured benefit or authorization. No additional
+repository code/configuration is executed to produce these pointers. Non-JS repos
+do not receive JS adapters without relevant evidence; missing signals stay unknown.
+
+For GitHub semantics, pass a reviewed YAML-1.2-to-JSON conversion to
+`inspect_workflows.py`; see [platform guidance](09-platform-updates.md). Resolve
+lockfiles, caller cache limits, parallel synchronization, matrix expansion and
+provider capability separately from this bounded discovery inventory.
+
 Map what `scripts/discover_repo.py` found to the modules that may apply. A detection is a hint: open the file before you rely on it.
 
 ## Validation architecture before tool selection

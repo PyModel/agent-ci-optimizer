@@ -1,0 +1,55 @@
+{
+  "schema": "ci-validation-policy/1",
+  "repository": "example/project",
+  "feedback_budget_s": 300,
+  "minimum_pr_samples": 20,
+  "max_evidence_age_s": 120,
+  "categories": {
+    "rules": [
+      {
+        "identity": "github-app:123/workflow:ci/rules"
+      }
+    ],
+    "change": [
+      {
+        "identity": "github-app:123/workflow:ci/change"
+      }
+    ],
+    "integration": [
+      {
+        "identity": "github-app:123/workflow:ci/integration"
+      }
+    ],
+    "release": [
+      {
+        "identity": "github-app:123/workflow:ci/release"
+      }
+    ]
+  },
+  "integration": {
+    "mode": "rolling",
+    "max_green_age_s": 3600,
+    "max_running_age_s": 1800,
+    "max_unverified_commits": 10
+  },
+  "rollout": {
+    "enabled": true,
+    "stages_pct": [
+      5,
+      25,
+      100
+    ],
+    "minimum_samples": 1000,
+    "max_age_s": 300,
+    "minimum_observation_s": 120,
+    "metrics": {
+      "error_rate": {
+        "max": 0.01
+      },
+      "p95_latency_ms": {
+        "max": 200,
+        "max_relative_increase": 0.1
+      }
+    }
+  }
+}

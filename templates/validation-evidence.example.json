@@ -1,0 +1,158 @@
+{
+  "schema": "ci-validation-evidence/1",
+  "repository": "example/project",
+  "policy_digest": "sha256:2860351bf73fcbeaf260b480e0d5e14d6df0fa67ed1b8433554582db0062bb42",
+  "observed_at": "2026-11-17T12:10:00+00:00",
+  "pr_events_complete": true,
+  "pr_events": [
+    {
+      "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "received_at": "2026-11-17T12:00:00Z",
+      "policy_digest": "sha256:2860351bf73fcbeaf260b480e0d5e14d6df0fa67ed1b8433554582db0062bb42",
+      "state": "completed",
+      "checks_complete": true,
+      "checks": [
+        {
+          "identity": "github-app:123/workflow:ci/rules",
+          "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "policy_digest": "sha256:2860351bf73fcbeaf260b480e0d5e14d6df0fa67ed1b8433554582db0062bb42",
+          "attempt": 1,
+          "conclusion": "success",
+          "source": "https://example.invalid/check/123",
+          "completed_at": "2026-11-17T12:03:00Z"
+        },
+        {
+          "identity": "github-app:123/workflow:ci/change",
+          "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "policy_digest": "sha256:2860351bf73fcbeaf260b480e0d5e14d6df0fa67ed1b8433554582db0062bb42",
+          "attempt": 1,
+          "conclusion": "success",
+          "source": "https://example.invalid/check/123",
+          "completed_at": "2026-11-17T12:03:00Z"
+        }
+      ],
+      "pr": "1"
+    },
+    {
+      "revision": "dddddddddddddddddddddddddddddddddddddddd",
+      "received_at": "2026-11-17T12:01:00Z",
+      "policy_digest": "sha256:2860351bf73fcbeaf260b480e0d5e14d6df0fa67ed1b8433554582db0062bb42",
+      "state": "completed",
+      "checks_complete": true,
+      "checks": [
+        {
+          "identity": "github-app:123/workflow:ci/rules",
+          "revision": "dddddddddddddddddddddddddddddddddddddddd",
+          "policy_digest": "sha256:2860351bf73fcbeaf260b480e0d5e14d6df0fa67ed1b8433554582db0062bb42",
+          "attempt": 1,
+          "conclusion": "success",
+          "source": "https://example.invalid/check/123",
+          "completed_at": "2026-11-17T12:04:00Z"
+        },
+        {
+          "identity": "github-app:123/workflow:ci/change",
+          "revision": "dddddddddddddddddddddddddddddddddddddddd",
+          "policy_digest": "sha256:2860351bf73fcbeaf260b480e0d5e14d6df0fa67ed1b8433554582db0062bb42",
+          "attempt": 1,
+          "conclusion": "success",
+          "source": "https://example.invalid/check/123",
+          "completed_at": "2026-11-17T12:04:00Z"
+        }
+      ],
+      "pr": "2"
+    }
+  ],
+  "integration_records_complete": true,
+  "integration_records": [
+    {
+      "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "received_at": "2026-11-17T12:00:00Z",
+      "policy_digest": "sha256:2860351bf73fcbeaf260b480e0d5e14d6df0fa67ed1b8433554582db0062bb42",
+      "state": "completed",
+      "checks_complete": true,
+      "checks": [
+        {
+          "identity": "github-app:123/workflow:ci/integration",
+          "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "policy_digest": "sha256:2860351bf73fcbeaf260b480e0d5e14d6df0fa67ed1b8433554582db0062bb42",
+          "attempt": 1,
+          "conclusion": "success",
+          "source": "https://example.invalid/check/123",
+          "completed_at": "2026-11-17T12:05:00Z",
+          "input_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        }
+      ],
+      "input_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }
+  ],
+  "integration_state": {
+    "main_head_revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "unverified_commits": 0,
+    "active": false
+  },
+  "release_candidate": {
+    "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "received_at": "2026-11-17T12:05:00Z",
+    "policy_digest": "sha256:2860351bf73fcbeaf260b480e0d5e14d6df0fa67ed1b8433554582db0062bb42",
+    "state": "completed",
+    "checks_complete": true,
+    "checks": [
+      {
+        "identity": "github-app:123/workflow:ci/release",
+        "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "policy_digest": "sha256:2860351bf73fcbeaf260b480e0d5e14d6df0fa67ed1b8433554582db0062bb42",
+        "attempt": 1,
+        "conclusion": "success",
+        "source": "https://example.invalid/check/123",
+        "completed_at": "2026-11-17T12:07:00Z",
+        "input_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "artifact_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      }
+    ],
+    "input_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "artifact_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "provenance": {
+      "verified": true,
+      "source": "https://example.invalid/attestation/123",
+      "verified_at": "2026-11-17T12:08:00Z",
+      "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "input_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "artifact_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "policy_digest": "sha256:2860351bf73fcbeaf260b480e0d5e14d6df0fa67ed1b8433554582db0062bb42"
+    }
+  },
+  "rollout_state": {
+    "deployment_id": "deploy-1",
+    "environment": "production",
+    "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "artifact_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "stage_pct": 5,
+    "stage_started_at": "2026-11-17T12:05:00Z"
+  },
+  "rollout_observation": {
+    "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "artifact_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "stage_pct": 5,
+    "deployment_id": "deploy-1",
+    "environment": "production",
+    "stage_started_at": "2026-11-17T12:05:00Z",
+    "source": "https://example.invalid/metrics/query/123",
+    "complete": true,
+    "window_started_at": "2026-11-17T12:06:00Z",
+    "window_ended_at": "2026-11-17T12:10:00+00:00",
+    "samples": 1000,
+    "metrics": {
+      "error_rate": 0.001,
+      "p95_latency_ms": 100
+    },
+    "baseline": {
+      "p95_latency_ms": 100
+    },
+    "baseline_comparable": true,
+    "baseline_source": "https://example.invalid/metrics/baseline/123",
+    "baseline_context": "Verified comparable environment, workload and request mix",
+    "baseline_window_started_at": "2026-11-17T12:00:00Z",
+    "baseline_window_ended_at": "2026-11-17T12:04:00Z"
+  },
+  "example_only": true
+}

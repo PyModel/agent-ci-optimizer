@@ -21,3 +21,13 @@ Steps:
 10. Report ordered reversible interventions with acceptance criteria, evidence, risk policy and rollback. Distinguish same-workload acceleration from scheduling redistribution: moving tests later requires reporting total PR/main/release work, full-green delay and residual risk. In OBSERVE, deliver the proposal; in authorized implementation, complete the approved scope.
 
 When implementing: preserve every required obligation across categories, keep check identities or migrate them explicitly, and prove negative cases reject green. Use ≥10 comparable runs per arm before claiming equivalent-work speed-up; missing evidence is preliminary. See [validation architecture](../references/08-validation-architecture.md) for the full decision procedure.
+
+Available read-only helpers: `discover_repo.py` routes positive evidence to relevant
+stack adapters; `collect_gh.py` creates immutable manifest-backed snapshots;
+`analyze_gh.py` computes cohort/attempt/graph diagnostics; `inspect_workflows.py`
+reviews normalized workflow semantics. `benchmark.py` captures before/after
+provenance and cleans process groups. `check_reports.py` verifies shard transport.
+`evaluate_validation.py` evaluates reviewed four-category policy against normalized
+evidence, with explicit `--require` result gating. Read every helper's `--help` and
+the [evidence contract](../references/11-evidence-formats.md). None authenticates
+arbitrary JSON assertions, authorizes deployment, or proves an untested stack works.

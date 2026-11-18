@@ -1,0 +1,37 @@
+{
+  "schema": "ci-job-graph/1",
+  "complete": true,
+  "matrix_resolved": true,
+  "required_nodes": [
+    "ci"
+  ],
+  "nodes": [
+    {
+      "id": "build",
+      "needs": [],
+      "duration_s": 300
+    },
+    {
+      "id": "test",
+      "needs": [
+        "build"
+      ],
+      "duration_s": 5
+    },
+    {
+      "id": "ci",
+      "needs": [
+        "test"
+      ],
+      "duration_s": 0
+    }
+  ],
+  "counterfactuals": [
+    {
+      "name": "build-100-seconds-faster",
+      "durations_s": {
+        "build": 200
+      }
+    }
+  ]
+}

@@ -408,6 +408,42 @@ def provider_for(path: str) -> str:
     return next((name for name, patterns in checks if any(matches(path, pattern) for pattern in patterns)), "unknown")
 
 
+def adapter_candidates(files: list[str], packages: dict, found: dict) -> list[dict]:
+    """Route positive evidence to an adapter without reading or running more code."""
+    definitions = (
+        ("go", (), ("go.mod", "go.work", "*_test.go"), "go"),
+        ("nextjs", ("next",), ("next.config.*",), "nextjs"),
+        ("vitest", ("vitest",), ("vitest.config.*", "vitest.workspace.*"), "vitest-transform-and-worker-reuse"),
+        ("playwright", ("playwright", "@playwright/test"), ("playwright.config.*",), "playwright"),
+        ("typed-lint", ("typescript", "oxlint", "@typescript/native-preview"),
+         ("tsconfig*.json", ".oxlintrc.json", "oxlint.config.*"), "typed-lint-and-typescript"),
+        ("formatting", ("prettier", "oxfmt", "@biomejs/biome"),
+         (".prettierrc*", "prettier.config.*", ".oxfmtrc*", "biome.json*"), "formatting"),
+        ("remote-task-cache", ("nx", "turbo"), ("nx.json", "turbo.json"), "nx-and-turborepo-remote-caches"),
+        ("docker", (), CATEGORIES["containers"], "docker-and-buildkit"),
+    )
+    candidates = []
+    for name, dependencies, patterns, anchor in definitions:
+        evidence = [{"path": path, "basis": "filename"} for path in files
+                    if any(matches(path, pattern) for pattern in patterns)]
+        for path, package in sorted(packages.items()):
+            matched = sorted(set(package.get("tooling_deps", [])) & set(dependencies))
+            if matched:
+                evidence.append({"path": path, "basis": "dependency names", "dependencies": matched})
+        if evidence:
+            candidates.append({"adapter": name, "status": "candidate_requires_review",
+                               "evidence": evidence[:MAX_LANGUAGE_EXAMPLES],
+                               "evidence_truncated": len(evidence) > MAX_LANGUAGE_EXAMPLES,
+                               "version_support": "unknown", "measured_benefit": "unknown",
+                               "reference": f"references/10-stack-adapters.md#{anchor}"})
+    if found["ci"]:
+        candidates.append({"adapter": "runner-and-artifact-transport", "status": "candidate_requires_review",
+                           "evidence": [{"path": path, "basis": "CI filename"} for path in found["ci"][:MAX_LANGUAGE_EXAMPLES]],
+                           "version_support": "unknown", "measured_benefit": "unknown",
+                           "reference": "references/10-stack-adapters.md#artifact-transport"})
+    return candidates
+
+
 def validation_topology(found: dict, packages: dict, workflows: dict, truncated: bool, issues: list[dict]) -> dict:
     """Locate evidence for an agent's assessment; never assign checks by name.
 
@@ -502,6 +538,7 @@ def discover(root: Path) -> dict:
         "found": found,
         "package_json": packages,
         "github_workflows": workflows,
+        "adapter_candidates": adapter_candidates(files, packages, found),
         "validation_topology": validation_topology(found, packages, workflows, truncated, issues),
         "hints": {
             "js_modules_applicable": js,

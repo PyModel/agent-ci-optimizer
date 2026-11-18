@@ -1,6 +1,13 @@
 # Config recipes
 
-Starting points to adapt, not paste. Action majors are the latest releases as of 2026-11-01 (checkout v7, setup-node v7, setup-python v7, cache v6, upload-artifact v7, download-artifact v8, setup-go v7, setup-uv v10, setup-bun v2, nx-set-shas v5, pnpm/action-setup v6). Pin each to a full commit SHA per repo policy: `gh api repos/OWNER/ACTION/commits/vX.Y.Z --jq .sha`. Run `actionlint` on every workflow you write.
+Starting points to adapt, not paste. The examples use source-reviewed action majors
+(checkout v7, setup-node v7, setup-python v7, cache v6, upload-artifact v7,
+download-artifact v8, setup-go v7, setup-uv v10, setup-bun v2, nx-set-shas v5,
+pnpm/action-setup v6). Verify the exact current release and runtime support, then pin
+to an immutable commit or supported reviewed native lockfile under repo policy.
+Example resolution: `gh api repos/OWNER/ACTION/commits/vX.Y.Z --jq .sha`.
+Run actionlint and the [semantic checks](09-platform-updates.md); record unsupported
+new syntax separately. No downstream stack execution is implied by these examples.
 
 First map [the four validation categories](08-validation-architecture.md). The full-test
 example below preserves every check on each event; it is not a universal PR schedule.
@@ -10,6 +17,9 @@ selector shadow evidence and an aggregate that evaluates the work intended for t
 ## Parallel jobs + one aggregate required check
 
 Keep the old required check name on the aggregate job (`ci` here) so branch rules keep working.
+The report job assumes the reviewed `check_reports.py` helper has been made available
+at `scripts/check_reports.py`. Keep the project's existing coverage collection,
+payload transport, merge options and thresholds when adapting its commands.
 
 ```yaml
 name: ci
@@ -53,13 +63,38 @@ jobs:
       - uses: actions/upload-artifact@v7
         if: ${{ !cancelled() }}
         with:
-          name: blob-${{ matrix.shard }}
+          name: blob-${{ github.run_attempt }}-${{ matrix.shard }}
           path: .vitest/blob/blob-*.json
           if-no-files-found: error
           include-hidden-files: true
+  reports:
+    if: ${{ !cancelled() }}
+    needs: [test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with: {persist-credentials: false}
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with: {node-version-file: .nvmrc, cache: pnpm}
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: blob-${{ github.run_attempt }}-*
+          path: downloaded-reports
+          merge-multiple: false
+      - name: Require every current-attempt shard and merge
+        env:
+          ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          python3 scripts/check_reports.py --root downloaded-reports \
+            --expected-shards 1 2 3 4 --prefix "blob-${ATTEMPT}-" \
+            --stage-out "$RUNNER_TEMP/validated-vitest-reports"
+          pnpm vitest run --merge-reports="$RUNNER_TEMP/validated-vitest-reports" --reporter=default
   ci:
     if: always()
-    needs: [lint, test]
+    needs: [lint, test, reports]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
@@ -74,9 +109,15 @@ jobs:
 If some needs may be skipped on purpose, list them explicitly in the jq filter (`.key == "e2e" and .value.result == "skipped"`); never accept `skipped` for all. Prove the aggregate goes red by failing each child once ([failure testing](03-security-correctness.md#failure-testing-do-it-dont-argue-it)).
 
 The blob path above is the Vitest 5 default (verified 2026-11-17); honor an explicit
-`outputFile` in the project. Before a sharded coverage/report gate succeeds, require
-every expected shard, merge its evidence and enforce the original coverage threshold.
-Uploading on test failure preserves diagnostics; it never clears that failure.
+`outputFile` in the project. The example proves report transport and retains test
+exit status. If the project requires coverage, its existing coverage collection and
+merge/threshold commands are additional required work, not optional flags to drop.
+Verify actual provider/version coverage payloads travel with each shard, including
+untested-file obligations and attachments. Seed missing-shard and low-coverage
+failures before adoption. Uploading on test failure preserves diagnostics; it never
+clears that failure. A partial rerun must either rebuild the complete report set or
+explicitly verify retained predecessor artifacts; this example fails closed unless
+all current-attempt shards exist.
 
 If heavy jobs skip drafts, include `ready_for_review` alongside `opened`, `synchronize`
 and `reopened`, and test draft→ready without a new commit. Decide draft-state handling
@@ -168,6 +209,11 @@ export default [/* existing config */, ...oxlint.configs["flat/recommended"]];
 ```
 
 Generate a full replacement config with `npx @oxlint/migrate` and diff diagnostics before dropping ESLint.
+
+For a compatible installed Oxlint/tsgolint version, also benchmark
+`oxlint --type-aware --type-check` against separate typed lint and `tsc --noEmit`.
+Preserve declaration/build checks and unsupported rules until diagnostic/negative
+fixtures prove equivalence. See [typed-lint adapter](10-stack-adapters.md#typed-lint-and-typescript).
 
 ## Typecheck
 

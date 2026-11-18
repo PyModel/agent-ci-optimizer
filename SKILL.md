@@ -58,13 +58,13 @@ Script paths below are relative to this skill's directory; from the target repo,
 2. Inventory: `python3 scripts/discover_repo.py --root REPO > REPO/.ci-audit/discovery.json`. It reads bounded regular `package.json` and GitHub workflow files, rejects file/directory symlinks, and inventories other files by name. Parsed config fields can still contain sensitive literals: keep evidence local and review before sharing. Verify each hint by reading approved files. Map evidence with the [discovery matrix](references/01-discovery-matrix.md) and build the four-category plan.
 3. Identify CI provider(s), runner trust domains, workflows and job `needs`, languages, lockfiles, monorepo graph, test runners, coverage gates, deployment paths, and secret **names and permission scopes only**.
 4. Identify permission boundaries: fork PR vs trusted branch vs merge queue vs release. GitHub collection needs authenticated `gh` with read access to Actions; benchmarking never justifies write scope.
-5. Collect up to 150 recent completed runs (failed runs included, kept distinguishable):
+5. Collect up to 150 recent runs into an immutable, hashed snapshot (failed runs included, kept distinguishable):
    `python3 scripts/collect_gh.py --repo OWNER/REPO --limit 150 --out REPO/.ci-audit`
-   Add `--event pull_request` or `--event push --branch main` to separate loops. Exit 3 means some runs lack job data: metrics are partial, say so. Other providers: normalize to the [raw schema](references/04-measurement-benchmarking.md#raw-schema).
-6. Analyze: `python3 scripts/analyze_gh.py --input REPO/.ci-audit --output REPO/.ci-audit/metrics.json`. It reports push→green, run wall time, job queue, setup share, shard skew, reruns, flaky SHAs, first-pass failure rate, last-finishing job (tagged `required`), the gap to the runner-up job, heavy tails, and billable minutes per runner label. It does not know the `needs` DAG; join the YAML yourself. If a workflow file changed inside the window, re-run with `--since <commit date>` so one config era is measured.
-   Treat these as exploratory summaries: independently verify selected run/job cohorts, freshness, chronology, attempt identity and required-check completeness. The current analyzer is not the new PR-budget metric or a release-eligibility ledger; use verified raw events and exact revision/artifact evidence for those decisions.
+   Add `--event pull_request --target-branch main`, or `--event push --branch main`, to separate loops. `--branch` filters history, not protected-policy scope. Use `--include-incomplete` to retain waiting/running observations, `--created`/`--workflow` for server filters, and `--incremental` for authenticated ETag revalidation. Exit 3 means explicit evidence gaps; inspect completeness, never reuse a failed payload. Other providers: [evidence formats](references/11-evidence-formats.md).
+6. Analyze: `python3 scripts/analyze_gh.py --input REPO/.ci-audit --output REPO/.ci-audit/metrics.json`. It separates attempts, successful latency proxies, queue, overlap-aware setup, step distributions, recovery, partial reruns, runner seconds, estimated rounded minutes and uncertainty. Add `--graph`, `--cohort-context` and dated `--pricing` only with reviewed evidence. `--since` filters the entire run/job/attempt population; keep configuration eras separate.
+   Inspect freshness, completeness, sample sizes and unresolved identities. These are diagnostic proxies. For PR budgets, full-suite freshness and exact artifact eligibility, use `evaluate_validation.py` with a reviewed policy and provider-normalized evidence; it does not authenticate sources or verify signatures. Missing/contradictory evidence cannot pass. See [evidence formats](references/11-evidence-formats.md).
 7. Establish p50/p95 for push→green, workflow wall, queue, setup, lint, typecheck, tests, cache hit/miss, flaky retries, runner spend, cost per merge, and tail outliers. Missing or inapplicable metrics are **unknown**, never zero.
-8. Read the [safety policy](references/03-security-correctness.md). Build the `needs` DAG and name the slowest required path.
+8. Read the [safety policy](references/03-security-correctness.md), [platform semantics](references/09-platform-updates.md) and relevant [stack adapters](references/10-stack-adapters.md). `inspect_workflows.py` accepts pinned-YAML-1.2-normalized JSON; expressions/reusable expansion and runtime identities remain unknown until resolved. Build the dependency DAG and name the slowest required path.
 
 **Evidence rule:** every number in an audit carries source, time window, sample size, metric definition and limitations. Compare the same workflow, event and runner class; keep fork PRs apart from privileged release builds. A YAML pattern match is a lead, not a finding: a finding needs positive evidence from this repo's runs ([evidence tiers](references/04-measurement-benchmarking.md#evidence-tiers)).
 
@@ -108,9 +108,9 @@ Script paths below are relative to this skill's directory; from the target repo,
 ### B. Benchmark one change
 
 1. Freeze baseline commit, toolchain versions, runner architecture and config. Measure warm cache, cold cache and queue separately.
-2. Run ≥10 comparable repetitions, interleaving arms when noisy; fewer is `preliminary`. `benchmark.py` runs **exactly** the argv after `--`, with no shell:
-   `python3 scripts/benchmark.py --label baseline --runs 10 --out REPO/.ci-audit/experiments/baseline.json -- npm test`
-   then the candidate with `--baseline REPO/.ci-audit/experiments/baseline.json`; its `comparison.warnings` must be empty or explained. Review commands for side effects first: deploys, payments, data migrations and destructive operations are never benchmarked.
+2. Run ≥10 comparable repetitions; low-sample tails remain preliminary. `benchmark.py` runs **exactly** the argv after `--`, with no shell:
+   `python3 scripts/benchmark.py --label baseline --runs 10 --metadata REPO/.ci-audit/benchmark-context.json --out REPO/.ci-audit/experiments/baseline.json -- npm test`
+   Compare with `--baseline`, or use reviewed JSON `--candidate-command` for balanced paired trials. Declare workload/toolchain/cache/runner identity; capture source before and after. Failed warmups, source mutation, incomplete process-group cleanup or missing comparability invalidate a claim. POSIX process groups are cleanup, not a sandbox. Review commands for side effects: deployments, payments, migrations and destructive operations are never benchmarked.
 3. Compare p50/p95 wall time, end-to-end required-check time, spend per merge, cache restores, flakes, diagnostics, tests run, coverage, builds and artifacts. A correctness or security regression rejects the change whatever the speed-up.
 4. Selector changes: run `scripts/select_affected.py` against adversarial diffs (lockfile, root config, CI file, schema, migration, cross-package rename); it is a reference oracle, not a substitute for the build tool's graph.
 5. Record the experiment and decide `ADOPT`, `REJECT`, or `INSUFFICIENT EVIDENCE`.
@@ -135,8 +135,12 @@ Check the agreed PR budget and category-3 completion/freshness independently. Co
 REPO/.ci-audit/             # in .git/info/exclude
   discovery.json
   validation-plan.md        # four categories, evidence, budget and accepted policy
-  raw/                      # provider API data; internal; never committed
+  current.json              # atomic pointer to latest collection snapshot
+  snapshots/<id>/raw/        # immutable provider payloads + hash/completeness manifest
   metrics.json
+  validation-policy.json    # reviewed expectations and fingerprinted policy
+  validation-evidence.json  # authenticated/verified provider facts, normalized
+  validation-result.json    # budget, integration, release and rollout decisions
   ci-audit-report.md        # from templates/audit-report.md
   critical-path.md
   cache-audit.md
@@ -162,6 +166,9 @@ If authorization is absent, stop before changing paid runners/providers, secrets
 - [Official sources](references/06-official-sources.md) — dated URLs, plus claims not yet confirmed.
 - [Config recipes](references/07-config-recipes.md) — aggregate check, caches, blobless clone, Oxlint, typecheck, Vitest projects, hooks.
 - [Validation architecture](references/08-validation-architecture.md) — four categories, evidence-driven design, PR budget, merge queue vs rolling main, release eligibility and rollout gates.
+- [Platform semantics](references/09-platform-updates.md) — parallel steps, cache capabilities, lockfiles, queues, approval, retention and runners.
+- [Stack adapters](references/10-stack-adapters.md) — Go, Next.js, Vitest, typed lint, formatting, Docker, Playwright, remote caches and artifacts.
+- [Evidence formats](references/11-evidence-formats.md) — snapshot, DAG, benchmark and four-category evaluator contracts; [feature matrix](references/feature-matrix.json) records support and verification scope.
 - [Agent brief](templates/agent-prompt.md) — paste-ready prompt for agents without this skill.
 
 Self-test: `python3 -m unittest discover -s tests -v` from this skill's directory.
