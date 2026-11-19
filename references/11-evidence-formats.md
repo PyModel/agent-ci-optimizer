@@ -78,7 +78,8 @@ or evidence remain unknown; rounded observed minutes are not the bill.
 Other CI providers can supply the legacy run/job shapes described in
 [measurement](04-measurement-benchmarking.md#raw-schema), or a conforming snapshot.
 They must separately resolve check identity, source revision, attempts and policy.
-No provider is claimed to have a native collector unless one is implemented.
+The native GitLab collector emits its own single-pipeline snapshot; it is not a
+GitHub-format input to `analyze_gh.py`. See [measured adapters](13-measured-adapters.md).
 
 ## Dependency graphs
 

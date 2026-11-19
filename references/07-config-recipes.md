@@ -106,7 +106,15 @@ jobs:
             || { echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'; exit 1; }
 ```
 
-If some needs may be skipped on purpose, list them explicitly in the jq filter (`.key == "e2e" and .value.result == "skipped"`); never accept `skipped` for all. Prove the aggregate goes red by failing each child once ([failure testing](03-security-correctness.md#failure-testing-do-it-dont-argue-it)).
+If some needs may skip, keep the workflow itself eligible for every protected candidate.
+The selector must be a direct need of the aggregate; validate its successful
+completion, candidate revision, event, and explicit per-job decision before using
+its outputs. Accept `skipped` only for a job that the validated decision marks not
+required. A failed/missing selector or unexpectedly skipped/cancelled job fails the
+gate. Run FULL on unknown selection inputs. Top-level `paths` filters and
+`if: always()` inside a skipped workflow cannot implement this contract. Prove the
+aggregate goes red on each unexpected skip and child failure
+([failure testing](03-security-correctness.md#failure-testing-do-it-dont-argue-it)).
 
 The blob path above is the Vitest 5 default (verified 2026-11-17); honor an explicit
 `outputFile` in the project. The example proves report transport and retains test

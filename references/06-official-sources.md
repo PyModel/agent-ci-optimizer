@@ -105,3 +105,17 @@ downstream framework/compiler/plugin compatibility; complete test-selection cove
 cryptographic provenance verification; telemetry comparability; measured savings.
 These require target evidence. Python helper fixtures do not establish production
 support for every stack or a measured performance improvement.
+
+
+## Measured adapters review (2026-11-19)
+
+| Topic | Fact relied on | URL |
+|---|---|---|
+| GitHub cache inventory | Cache metadata has its own paginated endpoint; it does not establish per-job hits | https://docs.github.com/en/rest/actions/cache |
+| GitHub artifact verification | GitHub CLI supports constrained signer workflow, source digest and signer digest verification | https://cli.github.com/manual/gh_attestation_verify |
+| GitLab jobs and pipelines | Native queued duration, retried jobs, bridge jobs and downstream pipeline identities | https://docs.gitlab.com/api/jobs/ · https://docs.gitlab.com/api/pipelines/ |
+| Runner routing | Matching idle runners and ephemeral runner lifecycle are explicit capabilities | https://docs.github.com/en/actions/reference/runners/self-hosted-runners |
+| CI/CD telemetry | Optional OpenTelemetry CI/CD schema; pin the version | https://opentelemetry.io/docs/specs/semconv/cicd/ |
+| Gradle optimization | Configuration caching is separate from task-output build caching | https://docs.gradle.org/current/userguide/performance.html · https://docs.gradle.org/current/userguide/configuration_cache.html |
+| Apple test automation | Xcode separates build-for-testing and test-without-building | https://developer.apple.com/library/archive/technotes/tn2339/_index.html |
+| Native test scheduling | Evaluate timing-based and dynamic split behavior against startup cost | https://circleci.com/docs/guides/test/use-dynamic-test-splitting/ · https://buildkite.com/docs/pipelines/configure/tests/bktec/installing-and-using-the-client |

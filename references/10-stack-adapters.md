@@ -23,6 +23,9 @@ Unknown support means retain the existing command. See the
 - [Nx and Turborepo remote caches](#nx-and-turborepo-remote-caches)
 - [Artifact transport](#artifact-transport)
 - [Runner resources](#runner-resources)
+- [Android and Gradle](#android-and-gradle)
+- [iOS and Xcode](#ios-and-xcode)
+- [Python and Rust](#python-and-rust)
 - [Toolchain maintenance](#toolchain-maintenance)
 
 ## Go
@@ -221,6 +224,52 @@ slim/ARM/larger/approved external runners only against actual architecture and
 capability requirements. Preserve trust, image/toolchain identity and cancellation.
 An improvement in execution can lose overall if queue/setup grows. Purchases and
 provider migrations need scoped authorization. See [platform guidance](09-platform-updates.md).
+
+## Android and Gradle
+
+**Detect:** wrapper, Gradle/JDK/AGP versions, build variants, unit vs instrumented
+tasks, emulator images and the host's actual memory/virtualization capability.
+Time configuration, task execution, SDK/AVD provisioning and emulator readiness
+separately. A KVM-dependent plan needs verified guest support; ARM alone is not proof.
+
+**Experiment:** independently benchmark dependency downloads, Gradle configuration
+cache and task-output build cache. Start with existing tasks and pinned toolchain;
+compare cold and warm runs and key any reusable state on actual inputs. Cap Gradle
+workers, test forks and emulator count against peak concurrent memory. Include
+daemon startup/reuse; do not trade sustained swapping or thermal throttling for more
+workers. Keep release signing separate from PR test workers.
+
+**Gate:** same variants, ABI, tests, coverage and instrumented test obligations;
+check plugin compatibility and cold fallbacks; fail on missing reports or skipped
+emulators. Sources: [Gradle performance](https://docs.gradle.org/current/userguide/performance.html),
+[configuration cache](https://docs.gradle.org/current/userguide/configuration_cache.html),
+[Android emulator acceleration](https://developer.android.com/studio/run/emulator-acceleration).
+
+## iOS and Xcode
+
+**Detect:** selected Xcode version, macOS runner architecture, schemes and test
+plans, simulator runtimes and device destinations. Time boot/provisioning,
+dependency resolution, build, test, and report transport separately.
+
+**Experiment:** compare current `xcodebuild test` with `build-for-testing` followed
+by `test-without-building` only on compatible toolchains, destinations and files.
+Preserve the tested product and expected test inventory through immutable transport.
+Measure startup overhead, total runner work, and simulator contention when sharding.
+**Gate:** preserve destinations, variants and result bundles; confirm fresh runner
+success and isolation of signing/release credentials. Source: [Apple test automation](https://developer.apple.com/library/archive/technotes/tn2339/_index.html).
+
+## Python and Rust
+
+For Python, distinguish interpreter/dependency setup from test execution. Record ABI,
+architecture, lockfile and fixture resources. Test parallel scheduling against
+isolated databases, ports and temp paths; keep serial groups and compare complete
+result inventories. Source: [pytest-xdist distribution](https://pytest-xdist.readthedocs.io/en/stable/distribution.html).
+
+For Rust, profile compilation and link time separately with Cargo timings. Key
+compiler/build artifacts to the target, features, toolchain, profile and native linker
+inputs, and validate cache-off behavior. Compare clean and incremental workloads
+separately; never use cached test results as evidence of a fresh run. Source:
+[Cargo timings](https://doc.rust-lang.org/cargo/reference/timings.html).
 
 ## Toolchain maintenance
 

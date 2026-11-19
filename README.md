@@ -26,6 +26,13 @@ Detection produces evidence for agent review, not permission to remove checks.
   - `collect_gh.py` and `analyze_gh.py` pull read-only GitHub Actions data and produce p50/p95 baselines.
   - `benchmark.py` runs paired timing.
   - `select_affected.py` is a fail-closed affected-test selector.
+  - [Measured adapters](references/13-measured-adapters.md) add exact-revision
+    GitHub check observations, artifact provenance verification, GitLab pipeline
+    snapshots, cache inventory/economics, test shard planning, selector shadow
+    comparison, and finite-capacity runner estimates. These are separate evidence
+    types, not automatic release decisions.
+- [evals/](evals/README.md): independent behavior cases and grading protocol;
+  included for maintainers, not evidence of executed model evaluations.
 
 ## Install
 
