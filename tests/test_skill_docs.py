@@ -50,7 +50,9 @@ class SkillDocsTest(unittest.TestCase):
         self.assertLessEqual(len(desc), 1024)
 
     def test_skill_md_size(self):
-        self.assertLessEqual(len((ROOT / "SKILL.md").read_text().splitlines()), 200)
+        core = ROOT / "SKILL.md"
+        self.assertLessEqual(len(core.read_text().splitlines()), 200)
+        self.assertLessEqual(len(core.read_bytes()), 13 * 1024)
 
     def test_links_resolve(self):
         self.assertEqual(broken_links(ROOT), [])

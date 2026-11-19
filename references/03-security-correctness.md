@@ -26,8 +26,8 @@ GitHub docs (2026-11-01):
 - A **job** skipped by `if:` reports **Success**.
 
 Consequences:
-- Moving a required workflow behind `paths:` blocks unrelated PRs forever. Moving a required job behind `if:` can silently pass. Neither is safe without an aggregate job.
-- Aggregate pattern: one always-running job (`if: always()`) that `needs` every gated job and fails unless each need's `result` is `success` or an **intended** `skipped` (decide per need, in code).
+- Do not put a required check in a workflow filtered out for eligible candidates. An aggregate with `if: always()` still cannot run if its parent workflow never triggers.
+- Aggregate pattern: trigger the required workflow on every eligible candidate; put selection on individual jobs. Include the selector and every candidate job in the aggregate's `needs`. Require a successful selector and each expected job's success. An intentional skip must be explicitly authorized for that job and event by valid selector evidence. Missing/unknown selector results, failures, cancellations, and unexpected skips never pass.
 - Renaming a job renames its check context. Keep names, or update branch protection/rulesets in the same change with owner approval.
 - Merge queue: workflows must also trigger on `merge_group`, or required checks never report for queued PRs.
 
@@ -71,7 +71,7 @@ Record each as an experiment entry; revert the probes.
 
 ## Cache poisoning
 
-A cache key an untrusted run can write and a trusted run can restore is an injection path. GitHub scopes PR caches to the PR merge ref, which protects the default branch; self-hosted or third-party cache backends may not. Never restore build outputs (as opposed to package stores) into release jobs; build releases from a clean install.
+A cache key an untrusted run can write and a trusted run can restore is an injection path. GitHub scopes PR caches to the PR merge ref, which protects the default branch; self-hosted or third-party cache backends may not. Do not consume opportunistic cached build outputs as release inputs. A clean, trusted build may restore a policy-approved dependency store with exact correctness inputs and trusted writers. Alternatively, promote the exact immutable artifact from an eligible trusted build after independently verifying source, workflow, policy and artifact digest/provenance. A cache hit, branch name, or checksum alone is not authenticated promotion. If either contract cannot be proven, fail closed.
 
 ## Supply chain
 
