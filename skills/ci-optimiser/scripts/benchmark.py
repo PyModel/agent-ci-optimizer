@@ -23,6 +23,13 @@ or escape their owned process group. Surviving background descendants invalidate
 even a successful direct child. Cleanup precedes the next sample.
 Never benchmark deploys, payments, migrations or destructive commands. Performance
 signals require independent correctness/security and representative CI evidence.
+
+Optional --preparation FILE (and --candidate-preparation FILE) runs exact reviewed
+argv before every warmup/trial. ci-benchmark-preparation/1 declares expected typed
+cache states and an explicit timeout. The command writes ci-benchmark-state/1 to
+CI_OPTIMISER_TRIAL_EVIDENCE with CI_OPTIMISER_TRIAL_NONCE. Both are fresh per trial.
+No cache is implicitly deleted. Preparation failures abort even with --allow-failures;
+preparation time and state/source evidence are retained separately from timed work.
 """
 from __future__ import annotations
 
@@ -35,6 +42,7 @@ import os
 import platform
 import random
 import re
+import secrets
 import signal
 import stat
 import subprocess
@@ -43,6 +51,9 @@ import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+
+import benchmark_preparation as preparation
+from cache_evidence import LAYERS, unknown_states, unresolved_states, validate_states
 
 UNKNOWN = "unknown"
 MIN_RUNS_FOR_DECISION = 10
@@ -322,7 +333,7 @@ def cleanup_group(proc: subprocess.Popen) -> dict:
             "method": "POSIX process group TERM then KILL", **({"error": error} if error else {})}
 
 
-def run_trial(cmd: list[str], cwd: Path, timeout: float | None, quiet: bool) -> dict:
+def run_trial(cmd: list[str], cwd: Path, timeout: float | None, quiet: bool, *, env: dict | None = None) -> dict:
     if os.name != "posix":
         raise ValueError("benchmark execution requires POSIX process-group containment; Windows is unsupported")
     started, wall, proc = time.perf_counter(), stamp(), None
@@ -331,7 +342,7 @@ def run_trial(cmd: list[str], cwd: Path, timeout: float | None, quiet: bool) -> 
     extra = {}
     try:
         sink = subprocess.DEVNULL if quiet else None
-        proc = subprocess.Popen(cmd, cwd=cwd, stdout=sink, stderr=sink, start_new_session=True)
+        proc = subprocess.Popen(cmd, cwd=cwd, stdout=sink, stderr=sink, start_new_session=True, env=env)
         code = proc.wait(timeout=timeout)
         status = "success" if code == 0 else "failed"
         if group_alive(proc.pid):
@@ -364,12 +375,53 @@ def run_once(cmd: list[str], cwd: Path, timeout: float | None, quiet: bool) -> t
     return result["seconds"], result["exit"]
 
 
+def prepare_trial(protocol: dict, cwd: Path, metadata_path: Path | None, quiet: bool) -> tuple[dict, dict]:
+    """Run only the reviewed argv; the protocol cannot authorize implicit cleanup."""
+    started = time.perf_counter()
+    before = snapshot(cwd, metadata_path)
+    record = {"protocol_sha256": protocol["sha256"], "nonce": secrets.token_hex(16),
+              "states": unknown_states(), "state_evidence": "unknown", "evidence_sha256": None, "issues": []}
+    try:
+        with tempfile.TemporaryDirectory(prefix="ci-optimiser-preparation-") as directory:
+            path = Path(directory) / "state.json"
+            env = {**os.environ, "CI_OPTIMISER_TRIAL_EVIDENCE": str(path), "CI_OPTIMISER_TRIAL_NONCE": record["nonce"]}
+            record["execution"] = run_trial(protocol["command"], cwd, protocol["timeout_s"], quiet, env=env)
+            if record["execution"]["exit"] != 0 or record["execution"]["cleanup"]["complete"] is not True:
+                record["issues"].append("preparation command failed or cleanup is incomplete")
+            else:
+                value = preparation.read_json(path)
+                record["states"] = preparation.response(value, record["nonce"])
+                record["state_evidence"] = "recorded_by_reviewed_protocol"
+                record["evidence_sha256"] = preparation.digest(value)
+                mismatches = preparation.mismatches(protocol["expected_states"], record["states"])
+                if mismatches:
+                    record["issues"].append("prepared state differs from the reviewed protocol: " + ", ".join(mismatches))
+    except (OSError, ValueError, UnicodeError) as exc:
+        record["issues"].append("preparation evidence unavailable: " + str(exc))
+    with signal_handlers(ignore=True):
+        after = snapshot(cwd, metadata_path)
+        record["provenance"] = provenance(before, after)
+        if record["provenance"]["changes"]:
+            record["issues"].append("preparation changed source, platform or declared workload inputs")
+    if "execution" not in record:
+        record["execution"] = {"seconds": 0.0, "exit": 127, "status": "preparation infrastructure error",
+                               "cleanup": {"complete": True}}
+    record["wall_seconds"] = round(time.perf_counter() - started, 6)
+    return record, after
+
+
 def summarize(times: list[float]) -> dict:
     if not times:
         return {"n": 0}
     return {"n": len(times), "min": round(min(times), 3), "p50": round(pct(times, 50), 3),
             "p95": round(pct(times, 95), 3), "max": round(max(times), 3),
             "mean": round(sum(times) / len(times), 3)}
+
+
+def preparation_summary(records: list[dict]) -> dict:
+    return {**summarize([row["wall_seconds"] for row in records]),
+            "total_s": round(sum(row["wall_seconds"] for row in records), 6),
+            "command_s": round(sum(row["execution"]["seconds"] for row in records), 6), "includes_failed": True}
 
 
 def _samples(result: dict) -> list[float]:
@@ -409,18 +461,9 @@ def _validate_git(value: object) -> None:
         raise ValueError("benchmark Git dirty must be boolean or unknown")
 
 
-def validate_benchmark(result: object) -> None:
-    """Accept old records as incomplete evidence, but reject malformed nested data."""
-    if not isinstance(result, dict) or not isinstance(result.get("summary"), dict) or not isinstance(result.get("runs"), list):
-        raise ValueError("benchmark must be an object with summary and runs")
-    for key in ("metadata", "env", "provenance"):
-        if key in result and not isinstance(result[key], dict):
-            raise ValueError(f"benchmark.{key} must be an object")
-    if "metadata" in result:
-        validate_metadata(result["metadata"])
-    if "env" in result:
-        _validate_environment(result["env"])
-    proof = result.get("provenance", {})
+def _validate_proof(proof: object) -> None:
+    if not isinstance(proof, dict):
+        raise ValueError("benchmark provenance must be an object")
     if "stable" in proof and type(proof["stable"]) is not bool and proof["stable"] != UNKNOWN:
         raise ValueError("benchmark provenance.stable must be boolean or unknown")
     if "changes" in proof and (not isinstance(proof["changes"], list)
@@ -435,28 +478,105 @@ def validate_benchmark(result: object) -> None:
                 _validate_environment(proof[key]["env"])
             if "metadata" in proof[key]:
                 validate_metadata(proof[key]["metadata"])
+
+
+def _validate_sample(sample: object, label: str) -> None:
+    if (not isinstance(sample, dict) or type(sample.get("exit")) is not int
+            or type(sample.get("seconds")) not in (int, float)
+            or not 0 <= sample["seconds"] <= sys.float_info.max):
+        raise ValueError(f"benchmark.{label} has an invalid exit or duration")
+    if "status" in sample and (not valid_text(sample["status"])
+                                or (sample["exit"] == 0) != (sample["status"] == "success")):
+        raise ValueError(f"benchmark.{label} status contradicts exit")
+    if "cleanup" in sample and (not isinstance(sample["cleanup"], dict)
+                                 or type(sample["cleanup"].get("complete")) is not bool):
+        raise ValueError(f"benchmark.{label} cleanup must declare boolean completeness")
+    for key in ("pair", "sequence", "position"):
+        if key in sample and (type(sample[key]) is not int or sample[key] < 1
+                              or (key == "position" and sample[key] > 2)):
+            raise ValueError(f"benchmark.{label}.{key} must be a valid positive index")
+    if "provenance" in sample:
+        _validate_proof(sample["provenance"])
+
+
+def validate_preparations(result: dict) -> int:
+    protocol = preparation.protocol(result["preparation_protocol"], recorded=True)
+    records = result.get("preparation_runs")
+    if not isinstance(records, list):
+        raise ValueError("benchmark preparation_runs must be an array")
+    required = {"protocol_sha256", "nonce", "states", "state_evidence", "evidence_sha256", "issues", "execution",
+                "wall_seconds", "provenance", "sequence", "pair", "position", "phase"}
+    seen, nonces, failures, last_sequence = {}, set(), 0, 0
+    for row in records:
+        if (not isinstance(row, dict) or set(row) != required or row["protocol_sha256"] != protocol["sha256"]
+                or not isinstance(row["nonce"], str) or re.fullmatch(r"[0-9a-f]{32}", row["nonce"]) is None
+                or row["nonce"] in nonces or type(row["wall_seconds"]) not in (int, float)
+                or not 0 <= row["wall_seconds"] <= sys.float_info.max
+                or not isinstance(row["issues"], list) or any(not valid_text(issue) for issue in row["issues"])
+                or row["phase"] not in ("runs", "warmup_runs")):
+            raise ValueError("benchmark preparation record has invalid identity, state or time evidence")
+        if not isinstance(row["execution"], dict) or not {"seconds", "exit", "status", "cleanup"} <= set(row["execution"]):
+            raise ValueError("benchmark preparation lacks complete command evidence")
+        _validate_sample({**row["execution"], **{key: row[key] for key in ("pair", "sequence", "position")}}, "preparation")
+        _validate_proof(row["provenance"])
+        if row["sequence"] <= last_sequence or row["wall_seconds"] < row["execution"]["seconds"]:
+            raise ValueError("benchmark preparation order or elapsed time contradicts execution")
+        last_sequence = row["sequence"]
+        seen[row["sequence"]] = row
+        nonces.add(row["nonce"])
+        states = validate_states(row["states"])
+        if row["state_evidence"] == "recorded_by_reviewed_protocol":
+            if row["evidence_sha256"] != preparation.digest({"schema": "ci-benchmark-state/1", "nonce": row["nonce"], "states": states}):
+                raise ValueError("benchmark preparation state fingerprint contradicts the response")
+            if preparation.mismatches(protocol["expected_states"], states) and not row["issues"]:
+                raise ValueError("benchmark preparation hides a state mismatch")
+        elif row["state_evidence"] != "unknown" or row["evidence_sha256"] is not None or states != unknown_states() or not row["issues"]:
+            raise ValueError("benchmark preparation claims state evidence without a valid response")
+        failures += bool(row["issues"]) or row["execution"]["exit"] != 0
+    used = set()
+    for phase in ("runs", "warmup_runs"):
+        for sample in result.get(phase, []):
+            sequence = sample.get("preparation_sequence")
+            if type(sequence) is not int or sequence not in seen or sequence in used:
+                raise ValueError("benchmark work lacks unique per-trial preparation")
+            row = seen[sequence]
+            if (row["phase"] != phase or any(row[key] != sample.get(key) for key in ("pair", "sequence", "position"))
+                    or row["issues"] or row["execution"]["exit"] != 0 or row["execution"].get("cleanup", {}).get("complete") is not True
+                    or "provenance" not in sample):
+                raise ValueError("benchmark work contradicts its preparation evidence")
+            used.add(sequence)
+    if (result.get("completed") is True and set(seen) != used
+            or result.get("preparation_summary") != preparation_summary(records)
+            or type(result.get("preparation_failures")) is not int or result["preparation_failures"] != failures):
+        raise ValueError("benchmark preparation summary or completion contradicts raw records")
+    return failures
+
+
+def validate_benchmark(result: object) -> None:
+    """Accept old records as incomplete evidence, but reject malformed nested data."""
+    if not isinstance(result, dict) or not isinstance(result.get("summary"), dict) or not isinstance(result.get("runs"), list):
+        raise ValueError("benchmark must be an object with summary and runs")
+    for key in ("metadata", "env", "provenance"):
+        if key in result and not isinstance(result[key], dict):
+            raise ValueError(f"benchmark.{key} must be an object")
+    if "metadata" in result:
+        validate_metadata(result["metadata"])
+    if "env" in result:
+        _validate_environment(result["env"])
+    _validate_proof(result.get("provenance", {}))
     observed_failures = {}
     for phase in ("runs", "warmup_runs"):
         samples = result.get(phase, [])
         if not isinstance(samples, list):
             raise ValueError(f"benchmark.{phase} must be an array")
         for sample in samples:
-            if (not isinstance(sample, dict) or type(sample.get("exit")) is not int
-                    or type(sample.get("seconds")) not in (int, float)
-                    or not math.isfinite(sample["seconds"]) or sample["seconds"] < 0):
-                raise ValueError(f"benchmark.{phase} has an invalid exit or duration")
-            if "status" in sample and (not valid_text(sample["status"])
-                                        or (sample["exit"] == 0) != (sample["status"] == "success")):
-                raise ValueError(f"benchmark.{phase} status contradicts exit")
-            if "cleanup" in sample and (not isinstance(sample["cleanup"], dict)
-                                         or type(sample["cleanup"].get("complete")) is not bool):
-                raise ValueError(f"benchmark.{phase} cleanup must declare boolean completeness")
-            for key in ("pair", "sequence", "position"):
-                if key in sample and (type(sample[key]) is not int or sample[key] < 1
-                                      or (key == "position" and sample[key] > 2)):
-                    raise ValueError(f"benchmark.{phase}.{key} must be a valid positive index")
+            _validate_sample(sample, phase)
         observed_failures["timed_failures" if phase == "runs" else "warmup_failures"] = sum(sample["exit"] != 0 for sample in samples)
     observed_failures["failures"] = sum(observed_failures.values())
+    if "preparation_protocol" in result:
+        observed_failures["failures"] += validate_preparations(result)
+    elif any(key in result for key in ("preparation_runs", "preparation_summary", "preparation_failures")):
+        raise ValueError("benchmark preparation records require their reviewed protocol")
     for key in ("failures", "warmup_failures", "timed_failures"):
         if key in result and (type(result[key]) is not int or result[key] < 0):
             raise ValueError(f"benchmark.{key} must be a non-negative integer")
@@ -479,10 +599,7 @@ def validate_benchmark(result: object) -> None:
             raise ValueError(f"benchmark.summary.{key} contradicts raw samples")
 
 
-def evidence_issues(arm: dict) -> list[str]:
-    """Derive suitability from records; imported claims alone are never evidence."""
-    issues = []
-    proof = arm.get("provenance", {})
+def stable_proof(proof: dict) -> bool:
     before, after = proof.get("before", {}), proof.get("after", {})
     sections = ("git", "env", "metadata")
     complete_snapshots = all(isinstance(snapshot.get(key), dict) for snapshot in (before, after) for key in sections)
@@ -490,9 +607,16 @@ def evidence_issues(arm: dict) -> list[str]:
                          and known(snapshot.get("git", {}).get("sha"))
                          and type(snapshot.get("git", {}).get("dirty")) is bool
                          for snapshot in (before, after))
-    if (not complete_snapshots or proof.get("stable") is not True or proof.get("changes")
-            or any(before.get(key) != after.get(key) for key in sections)
-            or not verifiable_git):
+    return (complete_snapshots and proof.get("stable") is True and not proof.get("changes")
+            and all(before.get(key) == after.get(key) for key in sections) and verifiable_git)
+
+
+def evidence_issues(arm: dict) -> list[str]:
+    """Derive suitability from records; imported claims alone are never evidence."""
+    issues = []
+    proof = arm.get("provenance", {})
+    before, after = proof.get("before", {}), proof.get("after", {})
+    if not stable_proof(proof):
         issues.append("source/input provenance missing, contradictory or changed during the experiment")
     if any(arm.get(key) != before.get(key) or arm.get(key) != after.get(key) for key in ("metadata", "env")):
         issues.append("top-level declarations do not match before/after provenance")
@@ -513,6 +637,18 @@ def evidence_issues(arm: dict) -> list[str]:
         issues.append("requested work is incomplete or completion cannot be established")
     if arm.get("summary") != summarize(_samples(arm)):
         issues.append("summary is incomplete for the observed successful trials")
+    if "preparation_protocol" in arm:
+        records = arm["preparation_runs"]
+        if any(row["issues"] or row["execution"]["exit"] != 0 or row["execution"].get("cleanup", {}).get("complete") is not True for row in records):
+            issues.append("preparation failed or lacks complete cleanup evidence")
+        if any(row["state_evidence"] != "recorded_by_reviewed_protocol" or unresolved_states(row["states"]) for row in records):
+            issues.append("per-trial cache-layer state is unresolved")
+        proofs = [row["provenance"] for row in records] + [sample.get("provenance", {}) for sample in samples]
+        if any(not stable_proof(value) for value in proofs):
+            issues.append("per-trial source/input provenance is missing or changed")
+        if any(value.get(boundary, {}).get(key) != before.get(key) for value in proofs
+               for boundary in ("before", "after") for key in ("git", "env", "metadata")):
+            issues.append("per-trial inputs differ from experiment provenance")
     return issues
 
 
@@ -555,6 +691,18 @@ def compare(current: dict, baseline: dict, *, paired: bool = False, seed: int = 
     for key in ENV_KEYS:
         if baseline.get("env", {}).get(key) != current.get("env", {}).get(key):
             incompatible.append(f"env.{key} differs")
+    protocols = [arm.get("preparation_protocol") for arm in (baseline, current)]
+    out["cache_state_evidence"] = "unverified_declarations" if not any(protocols) else "per_trial_reviewed_protocol_not_authenticated"
+    out["decision_scope"] = "timed command; preparation costs are reported separately"
+    if any(protocols):
+        if not all(protocols):
+            incompatible.append("per-trial preparation evidence is absent for one arm")
+        elif preparation.mismatches(protocols[0]["expected_states"], protocols[1]["expected_states"]):
+            incompatible.append("controlled starting cache-layer states differ between arms")
+        if all(protocols):
+            nonces = [row["nonce"] for arm in (baseline, current) for row in arm.get("preparation_runs", [])]
+            if len(nonces) != len(set(nonces)):
+                incompatible.append("preparation reuses a trial nonce across compared arms")
     source = [arm.get("provenance", {}).get("before", {}).get("git", {}) for arm in (baseline, current)]
     fingerprints = [item.get("fingerprint") for item in source]
     if any(not known(value) for value in fingerprints):
@@ -592,6 +740,16 @@ def compare(current: dict, baseline: dict, *, paired: bool = False, seed: int = 
         base, candidate = pct(a, q), pct(b, q)
         out[f"{key}_delta_s"] = round(candidate - base, 6)
         out[f"{key}_delta_pct"] = round((candidate - base) / base * 100, 2) if base > 0 else UNKNOWN
+    if all(protocols):
+        totals = []
+        for arm in (baseline, current):
+            by_sequence = {row["sequence"]: row for row in arm["preparation_runs"]}
+            totals.append([sample["seconds"] + by_sequence[sample["preparation_sequence"]]["wall_seconds"] for sample in arm["runs"]])
+        deltas = {f"{key}_delta_s": round(pct(totals[1], q) - pct(totals[0], q), 6) for key, q in (("p50", 50), ("p95", 95))}
+        out["preparation_cost"] = {"baseline": baseline["preparation_summary"], "candidate": current["preparation_summary"],
+                                   "preparation_plus_command": deltas, "independent_verification": False}
+        if all(pct(b, q) < pct(a, q) for q in (50, 95)) and any(pct(totals[1], q) >= pct(totals[0], q) for q in (50, 95)):
+            out["warnings"].append("timed work improved but preparation plus command did not improve both observed percentiles")
     out["design"] = "balanced interleaved pairs" if paired else "separate arms; temporal drift is not controlled"
     if len(a) >= 2 and len(b) >= 2:
         out["confidence"] = confidence(a, b, paired, seed)
@@ -650,6 +808,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--candidate-command", type=Path, help="reviewed JSON argv array for paired comparison")
     ap.add_argument("--candidate-label", default="candidate")
     ap.add_argument("--candidate-metadata", type=Path)
+    ap.add_argument("--preparation", type=Path, help="reviewed ci-benchmark-preparation/1 JSON before every warmup/trial")
+    ap.add_argument("--candidate-preparation", type=Path, help="candidate preparation protocol; defaults to --preparation")
     ap.add_argument("--seed", type=int, default=0, help="reproducible order/bootstrap seed")
     ap.add_argument("--quiet", action="store_true", help="discard command output")
     ap.add_argument("--allow-failures", action="store_true", help="continue ordinary failed samples; comparison stays ineligible")
@@ -668,9 +828,11 @@ def main(argv: list[str] | None = None) -> int:
         ap.error("--baseline and --candidate-command are mutually exclusive")
     if args.candidate_metadata and not args.candidate_command:
         ap.error("--candidate-metadata requires --candidate-command")
+    if args.candidate_preparation and (not args.candidate_command or not args.preparation):
+        ap.error("--candidate-preparation requires --candidate-command and --preparation")
     if not args.label.strip() or (args.candidate_command and (not args.candidate_label.strip() or args.candidate_label == args.label)):
         ap.error("arm labels must be non-empty and distinct")
-    for path in (args.baseline, args.metadata, args.candidate_command, args.candidate_metadata):
+    for path in (args.baseline, args.metadata, args.candidate_command, args.candidate_metadata, args.preparation, args.candidate_preparation):
         if path and path.resolve() == args.out.resolve():
             ap.error("--out must not overwrite an experiment input")
     try:
@@ -681,19 +843,26 @@ def main(argv: list[str] | None = None) -> int:
         candidate = read_command(args.candidate_command) if args.candidate_command else None
         if args.candidate_metadata:
             read_metadata(args.candidate_metadata)
+        protocols = [preparation.load_protocol(args.preparation) if args.preparation else None]
+        if candidate:
+            protocols.append(preparation.load_protocol(args.candidate_preparation) if args.candidate_preparation else protocols[0])
     except (OSError, ValueError, UnicodeError) as exc:
         ap.error(str(exc))
 
     start = stamp()  # Before provenance and every warmup, not after measured work.
+    experiment_started = time.perf_counter()
     commands = [cmd] + ([candidate] if candidate else [])
     labels = [args.label] + ([args.candidate_label] if candidate else [])
     metadata_paths = [args.metadata] + ([args.candidate_metadata or args.metadata] if candidate else [])
     arms = [{"schema": "ci-benchmark/2", "label": label, "command": command, "cwd": str(args.cwd.resolve()),
              "started_at": start, "warmup": args.warmup, "runs_requested": args.runs, "warmup_runs": [], "runs": [],
+             "cache_state_evidence": "unverified" if protocol is None else "per_trial_reviewed_protocol",
              "aborted": False, "limitations": ["Workload/toolchain/cache declarations need independent verification.",
                "Process-group containment excludes commands that daemonize or escape the session.",
-               "Ignored files and external dependencies are outside the Git fingerprint."]}
-            for label, command in zip(labels, commands)]
+               "Ignored files and external dependencies are outside the Git fingerprint.",
+               "Per-trial state evidence is caller supplied, not authenticated disk/cache contents."],
+             **({"preparation_protocol": protocol, "preparation_runs": []} if protocol is not None else {})}
+            for label, command, protocol in zip(labels, commands, protocols)]
     before, interrupted, aborted, sequence = [], None, False, 0
     schedule = paired_schedule(args.runs, args.seed) if candidate else [[0] for _ in range(args.runs)]
     try:
@@ -702,13 +871,27 @@ def main(argv: list[str] | None = None) -> int:
             for phase, orders in (("warmup_runs", [[*range(len(arms))] for _ in range(args.warmup)]), ("runs", schedule)):
                 for pair, order in enumerate(orders, 1):
                     for position, index in enumerate(order, 1):
-                        sample = run_trial(commands[index], args.cwd, args.timeout, args.quiet)
                         sequence += 1
+                        if protocols[index] is not None:
+                            prepared, work_before = prepare_trial(protocols[index], args.cwd, metadata_paths[index], args.quiet)
+                            prepared.update(sequence=sequence, pair=pair, position=position, phase=phase)
+                            arms[index]["preparation_runs"].append(prepared)
+                            interrupted = prepared["execution"].get("interrupted_signal")
+                            if prepared["issues"] or interrupted:
+                                aborted = True
+                                break
+                        sample = run_trial(commands[index], args.cwd, args.timeout, args.quiet)
                         sample.update(sequence=sequence, pair=pair, position=position)
+                        if protocols[index] is not None:
+                            sample["preparation_sequence"] = sequence
+                            with signal_handlers(ignore=True):
+                                sample["provenance"] = provenance(work_before, snapshot(args.cwd, metadata_paths[index]))
                         arms[index][phase].append(sample)
                         print(f"[{labels[index]}] {phase} {pair}: {sample['seconds']:.3f}s exit={sample['exit']}", file=sys.stderr)
                         interrupted = sample.get("interrupted_signal")
-                        if interrupted or not sample["cleanup"]["complete"] or (sample["exit"] != 0 and not args.allow_failures):
+                        if (interrupted or not sample["cleanup"]["complete"]
+                                or sample.get("provenance", {}).get("changes")
+                                or (sample["exit"] != 0 and not args.allow_failures)):
                             aborted = True
                             break
                     if aborted:
@@ -727,11 +910,17 @@ def main(argv: list[str] | None = None) -> int:
             arm["warmup_failures"] = sum(sample["exit"] != 0 for sample in arm["warmup_runs"])
             arm["timed_failures"] = sum(sample["exit"] != 0 for sample in arm["runs"])
             arm["failures"] = arm["warmup_failures"] + arm["timed_failures"]
+            if "preparation_runs" in arm:
+                records = arm["preparation_runs"]
+                arm["preparation_failures"] = sum(bool(row["issues"]) or row["execution"]["exit"] != 0 for row in records)
+                arm["failures"] += arm["preparation_failures"]
+                arm["preparation_summary"] = preparation_summary(records)
             arm["completed"] = not aborted and len(arm["runs"]) == args.runs and len(arm["warmup_runs"]) == args.warmup
             arm["summary"] = summarize(_samples(arm))
             if interrupted:
                 arm["interrupted_signal"] = interrupted
         result = arms[0]
+        result["experiment_elapsed_s"] = round(time.perf_counter() - experiment_started, 6)
         if candidate:
             result["candidate"] = arms[1]
             result["paired_design"] = {"method": "balanced randomized AB/BA", "seed": args.seed,
