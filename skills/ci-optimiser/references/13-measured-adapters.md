@@ -56,7 +56,7 @@ only to that helper's documented result. Use `--help` before collecting anything
 |---|---|
 | [GitHub check collector](../scripts/collect_gh_evidence.py) | `--repo OWNER/REPO --sha SHA --expect FILE --out FILE`, with authenticated read-only `gh` on GitHub.com. The expected identities are reviewed input; check conclusions come from GitHub. Emits `ci-github-check-evidence/1`, not an integrated-main policy or release-pass assertion. |
 | [Artifact attestation verifier](../scripts/verify_gh_attestation.py) | Local bytes, absolute reviewed GitHub CLI and its SHA-256, exact source repo/source SHA and signer workflow/signer SHA. Uses the pinned executable in a trusted POSIX environment; offline fixtures do not establish live availability. Reports provenance, not test pass or deployment approval. |
-| [GitHub cache inventory](../scripts/collect_gh_cache.py) | `--repo OWNER/REPO` (GitHub.com, authenticated read-only `gh`); redirect stdout to a private file. Exit 3 means incomplete. Hashes keys/versions and preserves ref, size and timestamps. Not transactional; cannot infer hits or eviction causes. |
+| [GitHub cache inventory](../scripts/collect_gh_cache.py) | `--repo OWNER/REPO` (GitHub.com, authenticated read-only `gh`); redirect stdout to a private file. Strict default `--retries 0`; output records transport policy/counters. Exit 3 means incomplete. Hashes keys/versions and preserves ref, size and timestamps. Not transactional; cannot infer hits or eviction causes. |
 | [Cache economics](../scripts/analyze_cache.py) | Pass a `ci-cache-events/1` diagnostic file or `/2` typed layer/context evidence with separate restore/save outcomes. Unknown inputs stay unknown; savings are runner seconds, not a critical-path gain or a bill. |
 | [Shard planner](../scripts/plan_shards.py) | `--inventory FILE --timings FILE --shards N`; normalized runner-ID JSON and reviewed coverage/serial contracts. Proposes inventory-preserving static assignments; no native JUnit import, runner dispatch, or coverage certification. Verify exact test execution and coverage separately. |
 | [Selector shadow evaluator](../scripts/evaluate_shadow.py) | One `ci-selector-shadow/1` file with exact selected/FULL inventories and results on the same revision and context. Exit 0 means one clean controlled comparison, never permission to remove full validation. |
@@ -80,6 +80,35 @@ IDs, event, and freshness here are illustrative, not defaults. A consumer of
 multiple evidence sources must bind exact candidate, workflow/policy scope and
 artifact digest, authenticate provenance, and revalidate freshness before an
 eligible decision. Do not concatenate these JSON files and mark release verified.
+
+### Cache-inventory transport policy
+
+`collect_gh_cache.py` defaults to `--retries 0`: a first failed metadata GET
+remains an incomplete collection, with its error retained in `gaps` and exit
+code 3. It does not repeat a workflow, job, test, or failed acceptance check.
+Timeout remains ten seconds per GET, with no retry wait under the strict
+default. Keep that profile for the zero-retry workflow.
+
+For a separately reviewed read-only metadata collection, `--retries N` accepts
+0–5 as an explicit transport limit. Nonzero values permit at most two seconds
+of total retry waiting per GET; server deadlines are never shortened to fit.
+The request limit is an upper bound, not a promise to exhaust every retry.
+The collector never enables retries automatically.
+
+Every inventory reports `transport.policy` (`timeout_s`,
+`retries_per_request`, `max_wait_s_per_request`, `max_pages`) and bounded
+`transport.stats` (`requests`, `retries`, `conditional_hits`,
+`cache_write_errors`). Counters cover this collection only, even when a caller
+reuses an instrumented client. `observed_api_calls` counts logical metadata
+GETs, while `requests` includes transport attempts. For an explicitly enabled
+503-then-200 retry, one logical GET therefore reports two requests and one
+retry. An exhausted request retains both the failure and those counters.
+
+An injected adapter without transport instrumentation yields null statistics,
+not invented zeros. Invalid, excessive or contradictory counters are unresolved
+and `counters_complete` is false. Inventory completeness describes cache
+metadata pagination, independently of transport evidence completeness. Neither
+status establishes individual cache hits, eviction causes or CI acceptance.
 
 ### Normalized offline input examples
 
