@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="800" height="176" viewBox="0 0 800 176" role="img" aria-labelledby="title">
-  <title id="title">Agent CI Optimizer</title>
+  <title id="title">ci-optimiser</title>
   <rect x="0.5" y="0.5" width="799" height="175" rx="19" fill="#111b2a" stroke="#35455a"/>
-  <text x="40" y="110" fill="#f1f5f9" font-family="system-ui, -apple-system, sans-serif" font-size="65" font-weight="700" letter-spacing="-1.8">Agent CI Optimizer</text>
+  <text x="40" y="110" fill="#f1f5f9" font-family="system-ui, -apple-system, sans-serif" font-size="65" font-weight="700" letter-spacing="-1.8">ci-optimiser</text>
   <g fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
     <path d="M638 78h96m0 18v18a12 12 0 0 1-12 12h-72a12 12 0 0 1-12-12v-9m-6 6 6-6 6 6" stroke="#657991"/>
     <circle cx="638" cy="78" r="10" fill="#111b2a" stroke="#a2b2c5"/>
