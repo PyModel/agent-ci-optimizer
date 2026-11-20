@@ -12,9 +12,12 @@ stdlib [scripts](skills/ci-optimiser/scripts/) and their [tests](skills/ci-optim
 - Tool versions, flags and prices in `references/` cite a dated URL in
   [06-official-sources.md](skills/ci-optimiser/references/06-official-sources.md); unverified claims go in its
   "Not confirmed" list.
-- Before committing: run `python3 -m unittest discover -s tests -v` from
-  `skills/ci-optimiser` (also checks bundle and source links/anchors), then run
-  `actionlint` from the repository root on `.github/workflows/`.
+- Before committing repository work: run `python3 .github/run_repository_tests.py`
+  from the root. It runs the complete bundled suite (including source links/anchors)
+  and repository-only release policy tests. Then run `actionlint` on every file in
+  `.github/workflows/`. For a standalone installed skill, keep using
+  `python3 -m unittest discover -s tests -v` from its `ci-optimiser` directory;
+  it does not depend on repository release plumbing.
 - Enable the executable pre-push hook using the preservation-aware procedure in
   [README.md](README.md#local-pre-push-hook); its nine-second check supplements full CI.
 - Keep one installable entrypoint under `skills/ci-optimiser`; do not add a root `SKILL.md`.
