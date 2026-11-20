@@ -44,7 +44,7 @@ class SkillDocsTest(unittest.TestCase):
         text = (ROOT / "SKILL.md").read_text()
         self.assertTrue(text.startswith("---\n"))
         front = text.split("---", 2)[1]
-        self.assertRegex(front, r"(?m)^name: agent-ci-optimizer$")
+        self.assertRegex(front, r"(?m)^name: ci-optimiser$")
         self.assertRegex(front, r"(?m)^description: >-\n  Use when ")
         desc = " ".join(l.strip() for l in front.split("description: >-", 1)[1].splitlines())
         self.assertLessEqual(len(desc), 1024)
