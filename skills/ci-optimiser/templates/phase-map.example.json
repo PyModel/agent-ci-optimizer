@@ -1,0 +1,20 @@
+{
+  "schema": "ci-phase-map/1",
+  "review_reference": "REPLACE with reviewed workflow and expanded job/step inventory evidence",
+  "entries": [
+    {
+      "workflow_id": 123,
+      "config": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "job_identity": {"field": "name", "value": "tests"},
+      "setup_end_step": 3,
+      "steps": [
+        {"number": 1, "phase": "setup"},
+        {"number": 2, "phase": "setup"},
+        {"number": 3, "phase": "restore"},
+        {"number": 4, "phase": "work"},
+        {"number": 5, "phase": "save"},
+        {"number": 6, "phase": "teardown"}
+      ]
+    }
+  ]
+}
