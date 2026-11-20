@@ -164,6 +164,10 @@ secret or paid runner service is needed. Read the
 [release automation guide](docs/release-automation.md) for activation, versioning,
 failure handling, bounds and the precise publication guarantees.
 
+The [workflow lint diagnostics guide](docs/lint-timeout-diagnostics.md) preserves
+the unexplained five-second lint failure, the measured experiments that did not
+justify a tool change, and the bounded process evidence collected on a slow run.
+
 ## Local pre-push hook
 
 The executable `.githooks/pre-push` enforces a strict nine-second budget. It checks
