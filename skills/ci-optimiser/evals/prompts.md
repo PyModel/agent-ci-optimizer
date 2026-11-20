@@ -17,3 +17,7 @@
    No build timings or hardware pressure data were supplied.
 8. In a read-only audit, an unfamiliar provider exposes job completion but
    suppresses queue and retry details. The owner asks for a p95 speedup estimate.
+
+The versioned [public input cases](public/cases.json) supplement these prompts for
+repeatable offline comparisons. Give an executing session one case's prompt and
+input only; keep grading and other sessions' outputs outside its accessible context.
