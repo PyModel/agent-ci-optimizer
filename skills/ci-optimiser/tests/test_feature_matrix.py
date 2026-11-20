@@ -5,8 +5,11 @@ import ast
 import copy
 import json
 import re
+import shutil
+import tempfile
 import unittest
 from datetime import date
+from functools import lru_cache
 from pathlib import Path, PurePosixPath
 from urllib.parse import urlsplit
 
@@ -17,10 +20,6 @@ EXPECTED_RECOMMENDATIONS = {
     *(f"M{i}" for i in range(1, 15)),
     *(f"G{i}" for i in range(1, 11)),
     *(f"T{i}" for i in range(1, 13)),
-}
-EXPECTED_HELPERS = {
-    "collector", "analyzer", "job_graph", "benchmark", "validation_evaluator",
-    "selector", "discovery", "report_transport", "workflow_inspector", "feature_register",
 }
 PATH_FIELDS = ("implementation_paths", "documentation_paths", "test_paths")
 STATUSES = {"implemented", "implemented_with_limits", "conditional"}
@@ -53,6 +52,117 @@ def valid_date(value):
     except ValueError:
         return False
     return True
+
+
+@lru_cache(maxsize=256)
+def source_info(source):
+    """Cache by exact bytes decoded as text, so changed files never reuse stale facts."""
+    tree = ast.parse(source)
+    nodes = list(ast.walk(tree))
+    imports = set()
+    for node in nodes:
+        if isinstance(node, ast.Import):
+            imports.update(item.name.removeprefix("scripts.") for item in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            if node.module == "scripts":
+                imports.update(item.name for item in node.names)
+            elif node.module:
+                imports.add(node.module.removeprefix("scripts."))
+    strings = frozenset(node.value for node in nodes
+                        if isinstance(node, ast.Constant) and isinstance(node.value, str))
+    main_guard = any(isinstance(node, ast.If) and isinstance(node.test, ast.Compare)
+                     and isinstance(node.test.left, ast.Name) and node.test.left.id == "__name__"
+                     and len(node.test.ops) == 1 and isinstance(node.test.ops[0], ast.Eq)
+                     and len(node.test.comparators) == 1
+                     and isinstance(node.test.comparators[0], ast.Constant)
+                     and node.test.comparators[0].value == "__main__" for node in tree.body)
+    has_tests = any(isinstance(node, ast.FunctionDef) and node.name.startswith("test_") for node in nodes)
+    return frozenset(imports), strings, main_guard, has_tests
+
+
+def helper_inventory_problems(inventory, features, root, reviewed):
+    """Compare declared helper ownership with files, interfaces and static references."""
+    problems = []
+
+    def require(condition, message):
+        if not condition:
+            problems.append(message)
+
+    if not isinstance(inventory, dict):
+        return ["helper registry missing"]
+    require(set(inventory) == {"schema", "reviewed_on", "documentation", "helpers"},
+            "helper registry fields invalid")
+    require(inventory.get("schema") == "ci-helper-inventory/1", "helper registry schema invalid")
+    require(inventory.get("reviewed_on") == reviewed, "helper inventory review date inconsistent")
+    require(inventory.get("documentation") == "references/helper-registry.md"
+            and (root / "references/helper-registry.md").is_file(), "helper registry documentation missing")
+    entries = inventory.get("helpers")
+    if not isinstance(entries, list) or not entries:
+        return problems + ["helper entries missing"]
+    actual = {p.relative_to(root).as_posix(): p for p in (root / "scripts").rglob("*.py")}
+    paths = [e.get("path") for e in entries if isinstance(e, dict)]
+    require(string_list(paths) and len(paths) == len(entries), "duplicate or invalid helper paths")
+    require(set(p for p in paths if isinstance(p, str)) == set(actual), "helper file inventory mismatch")
+    trees = {}
+
+    def tree(path):
+        if path not in trees:
+            try:
+                trees[path] = source_info((root / path).read_text(encoding="utf-8"))
+            except (OSError, SyntaxError, UnicodeError):
+                trees[path] = (frozenset(), frozenset(), False, False)
+                problems.append("unreadable helper/test source: " + path)
+        return trees[path]
+
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        path = entry.get("path")
+        if not isinstance(path, str) or path not in actual:
+            continue
+        visibility, interface = entry.get("visibility"), entry.get("interface")
+        require(visibility in ("public", "internal"), path + ": visibility invalid")
+        require(interface in ("cli", "library"), path + ": interface invalid")
+        fields = {"path", "visibility", "interface", "feature_ids"}
+        if visibility == "internal":
+            fields |= {"consumed_by", "reason"}
+        require(set(entry) == fields, path + ": registry fields invalid")
+        main_guard = tree(path)[2]
+        require(main_guard == (interface == "cli"), path + ": declared interface differs from entrypoint")
+        require(not main_guard or visibility == "public", path + ": CLI cannot be internal")
+        expected = {ident for ident, feature in features.items() if feature.get("domain") == "repository"
+                    and path in feature.get("implementation_paths", [])}
+        linked = entry.get("feature_ids")
+        require(bool(expected) and string_list(linked, empty=False) and set(linked) == expected,
+                path + ": exact capability mapping missing or stale")
+        docs = {p for ident in expected for p in features[ident].get("documentation_paths", [])}
+        tests = {p for ident in expected for p in features[ident].get("test_paths", [])}
+        module = actual[path].stem
+        if visibility == "internal":
+            consumers = {other for other in actual if other != path and module in tree(other)[0]}
+            require(bool(consumers) and string_list(entry.get("consumed_by"), empty=False)
+                    and set(entry["consumed_by"]) == consumers, path + ": internal consumers missing or stale")
+            require(nonempty(entry.get("reason")), path + ": internal purpose missing")
+            continue
+        documented = False
+        for doc in docs:
+            doc_path = root / doc
+            if not doc_path.is_file():
+                continue
+            for target in re.findall(r"\]\(([^)#\s]+)(?:#[^)]*)?\)", doc_path.read_text(encoding="utf-8")):
+                if (doc_path.parent / target).resolve() == actual[path].resolve():
+                    documented = True
+        require(documented, path + ": public documentation link missing or stale")
+        referenced = False
+        for test in tests:
+            if not (root / test).is_file():
+                continue
+            test_tree = tree(test)
+            command_path = bool(test_tree[1] & {module, actual[path].name, path})
+            if module in test_tree[0] or command_path:
+                referenced = True
+        require(referenced, path + ": public test reference missing or stale")
+    return problems
 
 
 def matrix_problems(matrix, root=ROOT):
@@ -115,12 +225,11 @@ def matrix_problems(matrix, root=ROOT):
                     require(entry.startswith("tests/test_") and entry.endswith(".py"),
                             f"not a test file: {entry}")
                     try:
-                        tree = ast.parse(destination.read_text(encoding="utf-8"))
+                        info = source_info(destination.read_text(encoding="utf-8"))
                     except (SyntaxError, UnicodeError):
                         problems.append(f"unparseable test file: {entry}")
                     else:
-                        require(any(isinstance(node, ast.FunctionDef) and node.name.startswith("test_")
-                                    for node in ast.walk(tree)), f"test file has no tests: {entry}")
+                        require(info[3], f"test file has no tests: {entry}")
         require(bool(record.get("documentation_paths")), f"{label}: documentation evidence missing")
         urls = record.get("source_urls")
         require(string_list(urls, empty=False), f"{label}: source URLs missing or duplicated")
@@ -145,7 +254,8 @@ def matrix_problems(matrix, root=ROOT):
         label = feature.get("id", "unknown feature")
         require(nonempty(feature.get("title")), f"{label}: title missing")
         require(feature.get("status") in STATUSES, f"{label}: unknown status")
-        require(valid_date(feature.get("reviewed_on")) and feature.get("reviewed_on") == reviewed,
+        require(valid_date(feature.get("reviewed_on")) and valid_date(reviewed)
+                and feature.get("reviewed_on") <= reviewed,
                 f"{label}: invalid or inconsistent review date")
         scope = feature.get("version_scope", {})
         require(isinstance(scope, dict) and string_list(scope.get("reviewed"), empty=False)
@@ -172,7 +282,7 @@ def matrix_problems(matrix, root=ROOT):
             require(verification.get("kind") == "source_review"
                     and verification.get("runtime_execution") == "not_executed",
                     f"{label}: local fixtures cannot prove downstream execution")
-    require(helpers == EXPECTED_HELPERS, "repository helper inventory incomplete")
+    problems.extend(helper_inventory_problems(matrix.get("helper_inventory"), by_id, root, reviewed))
 
     coverage = matrix.get("recommendation_coverage")
     if not isinstance(coverage, list):
@@ -263,6 +373,80 @@ class FeatureMatrixTest(unittest.TestCase):
         altered = copy.deepcopy(self.matrix)
         altered["recommendation_coverage"][0]["feature_ids"] = ["unimplemented-feature"]
         self.assertTrue(any("feature mapping" in problem for problem in matrix_problems(altered)))
+
+
+    def test_missing_extra_and_duplicate_registry_entries_are_detected(self):
+        for change in (lambda rows: rows.pop(),
+                       lambda rows: rows.append(copy.deepcopy(rows[0])),
+                       lambda rows: rows[0].update(path="scripts/removed_helper.py")):
+            altered = copy.deepcopy(self.matrix)
+            change(altered["helper_inventory"]["helpers"])
+            self.assertTrue(any("helper" in problem for problem in matrix_problems(altered)))
+
+    def test_new_python_file_cannot_escape_registry_discovery(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "skill"
+            shutil.copytree(ROOT, root, ignore=shutil.ignore_patterns("__pycache__"))
+            (root / "scripts/unregistered.py").write_text(
+                'if __name__ == "__main__":\n    print("new command")\n')
+            self.assertIn("helper file inventory mismatch", matrix_problems(self.matrix, root))
+
+    def test_public_cli_cannot_be_reclassified_as_internal(self):
+        altered = copy.deepcopy(self.matrix)
+        entry = next(e for e in altered["helper_inventory"]["helpers"]
+                     if e["path"] == "scripts/collect_gh.py")
+        entry.update(visibility="internal", interface="library", consumed_by=[], reason="claimed internal")
+        problems = matrix_problems(altered)
+        self.assertIn("scripts/collect_gh.py: CLI cannot be internal", problems)
+        self.assertIn("scripts/collect_gh.py: declared interface differs from entrypoint", problems)
+
+    def test_public_library_remains_mapped_and_internal_consumers_are_exact(self):
+        entries = self.matrix["helper_inventory"]["helpers"]
+        graph = next(e for e in entries if e["path"] == "scripts/graph_metrics.py")
+        self.assertEqual((graph["visibility"], graph["interface"]), ("public", "library"))
+        altered = copy.deepcopy(self.matrix)
+        module = next(e for e in altered["helper_inventory"]["helpers"]
+                      if e["path"] == "scripts/phase_map.py")
+        module["consumed_by"] = ["scripts/collect_gh.py"]
+        self.assertIn("scripts/phase_map.py: internal consumers missing or stale", matrix_problems(altered))
+
+    def test_capability_mapping_detects_missing_and_extra_feature_ids(self):
+        for feature_ids in ([], ["collector"], ["job_graph", "unregistered"]):
+            altered = copy.deepcopy(self.matrix)
+            entry = next(e for e in altered["helper_inventory"]["helpers"]
+                         if e["path"] == "scripts/graph_metrics.py")
+            entry["feature_ids"] = feature_ids
+            self.assertIn("scripts/graph_metrics.py: exact capability mapping missing or stale",
+                          matrix_problems(altered))
+
+    def test_existing_but_unrelated_docs_and_tests_do_not_satisfy_mapping(self):
+        for field, value, message in (
+                ("documentation_paths", ["references/03-security-correctness.md"], "public documentation link"),
+                ("test_paths", ["tests/test_skill_docs.py"], "public test reference")):
+            altered = copy.deepcopy(self.matrix)
+            feature = next(f for f in altered["features"] if f["id"] == "capacity_model")
+            feature[field] = value
+            self.assertIn("scripts/capacity_model.py: " + message + " missing or stale",
+                          matrix_problems(altered))
+
+    def test_changed_test_contents_invalidate_cached_source_facts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "skill"
+            shutil.copytree(ROOT, root, ignore=shutil.ignore_patterns("__pycache__"))
+            self.assertEqual(matrix_problems(self.matrix, root), [])
+            test = root / "tests/test_capacity_model.py"
+            test.write_text("def test_placeholder():\n    pass\n")
+            self.assertIn("scripts/capacity_model.py: public test reference missing or stale",
+                          matrix_problems(self.matrix, root))
+            test.write_text("# No executable tests remain.\n")
+            self.assertIn("test file has no tests: tests/test_capacity_model.py",
+                          matrix_problems(self.matrix, root))
+
+    def test_individual_review_dates_are_preserved_and_future_dates_rejected(self):
+        self.assertTrue(any(f["reviewed_on"] < self.matrix["reviewed_on"] for f in self.matrix["features"]))
+        altered = copy.deepcopy(self.matrix)
+        altered["features"][0]["reviewed_on"] = "2099-01-01"
+        self.assertTrue(any("review date" in p for p in matrix_problems(altered)))
 
 
 if __name__ == "__main__":
