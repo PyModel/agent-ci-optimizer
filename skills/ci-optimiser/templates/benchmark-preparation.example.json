@@ -1,0 +1,14 @@
+{
+  "schema": "ci-benchmark-preparation/1",
+  "review_reference": "REPLACE with the review of exact argv, state assertions and permitted fixture paths",
+  "command": ["python3", "scripts/prepare-benchmark-state.py"],
+  "timeout_s": 30,
+  "expected_states": {
+    "runner_snapshot": {"state": "unknown", "identity": null, "evidence": null},
+    "toolchain": {"state": "unknown", "identity": null, "evidence": null},
+    "dependencies": {"state": "unknown", "identity": null, "evidence": null},
+    "build_outputs": {"state": "unknown", "identity": null, "evidence": null},
+    "test_results": {"state": "unknown", "identity": null, "evidence": null},
+    "action_archive": {"state": "unknown", "identity": null, "evidence": null}
+  }
+}
