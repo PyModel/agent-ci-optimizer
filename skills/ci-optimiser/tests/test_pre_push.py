@@ -91,24 +91,38 @@ class PrePushTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "fixture contract failed"):
                 pre_push.check_push(ROOT, update("a" * 40))
 
-    @unittest.skipUnless(os.name == "posix", "executable POSIX Git hook")
-    def test_executable_wrapper_preserves_stdin_arguments_and_failure(self):
+    def test_source_repository_is_distinct_from_installed_bundle(self):
+        with tempfile.TemporaryDirectory() as td:
+            source = Path(td).resolve()
+            bundle = source / "skills/ci-optimiser"
+            bundle.mkdir(parents=True)
+            with patch.object(pre_push, "git", return_value=(str(source) + "\n").encode()), \
+                    patch.object(pre_push, "BUNDLE_ROOT", bundle):
+                self.assertEqual(pre_push.source_repository(), source)
+            installed = source / ".agents/skills/ci-optimiser"
+            with patch.object(pre_push, "git", return_value=(str(source) + "\n").encode()), \
+                    patch.object(pre_push, "BUNDLE_ROOT", installed):
+                with self.assertRaisesRegex(ValueError, "source checkout"):
+                    pre_push.source_repository()
+
+    @unittest.skipUnless(os.name == "posix", "POSIX Git hook")
+    def test_wrapper_preserves_stdin_arguments_and_failure_without_executable_mode(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
-            (root / "scripts").mkdir()
-            shutil.copyfile(ROOT / "scripts/run_budget.py", root / "scripts/run_budget.py")
+            bundled_scripts = root / "skills/ci-optimiser/scripts"
+            bundled_scripts.mkdir(parents=True)
+            shutil.copyfile(ROOT / "scripts/run_budget.py", bundled_scripts / "run_budget.py")
             hook = root / "pre-push"
-            shutil.copyfile(ROOT / ".githooks/pre-push", hook)
-            hook.chmod(0o755)
-            child = root / "scripts/pre_push.py"
+            shutil.copyfile(ROOT / "scripts/pre-push", hook)
+            child = bundled_scripts / "pre_push.py"
             child.write_text("import json,sys; print(json.dumps([sys.stdin.read(),sys.argv[1:]])); raise SystemExit(7)\n")
             raw = update("a" * 40).decode()
-            proc = subprocess.run([str(hook), "origin", "fixture-remote"], cwd=root, input=raw,
+            proc = subprocess.run(["sh", str(hook), "origin", "fixture-remote"], cwd=root, input=raw,
                                   capture_output=True, text=True, timeout=3)
             self.assertEqual(proc.returncode, 7)
             self.assertEqual(json.loads(proc.stdout), [raw, ["origin", "fixture-remote"]])
             self.assertIn("budget=9s", proc.stderr)
-        self.assertTrue(os.access(ROOT / ".githooks/pre-push", os.X_OK))
+        self.assertTrue((ROOT / "scripts/pre-push").is_file())
 
 
 if __name__ == "__main__":
