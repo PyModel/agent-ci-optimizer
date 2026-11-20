@@ -1,5 +1,5 @@
 ---
-name: agent-ci-optimizer
+name: ci-optimiser
 description: >-
   Use when CI is slow, flaky or expensive, agents wait on checks, or someone
   asks for faster runners, Blacksmith, Oxlint, Oxfmt, Bun, TypeScript 7,
@@ -9,7 +9,7 @@ description: >-
   prove tool coverage and negative controls, then make measured small PRs.
 ---
 
-# Agent CI Optimizer
+# ci-optimiser
 
 ## Mission and rules
 
