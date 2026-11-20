@@ -6,11 +6,12 @@
 |---|---|---|
 | push→green | verified event receipt → authoritative required-check completion for the exact current revision | compute from expected checks and raw events/attempts; analyzer output is a diagnostic proxy, not required-check aware |
 | queue | job `started_at − created_at` | jobs API |
-| setup | checkout + toolchain + cache + install steps | step timings, regex-classified |
+| setup | measured job-start-to-first-work boundary; separately attribute restore, save and teardown costs | reviewed phase map/boundaries where available; step-name inference is preliminary |
 | execution | elapsed execution excluding non-overlapping setup coverage; retain summed step work separately | jobs/step interval evidence |
 | critical path | longest chain through the resolved dependency DAG to required terminals | reviewed normalized graph + job timings; counterfactual recomputation |
 | suspected retry recovery | observed same-run failure followed by success; not proven flakiness | actual attempt history; inspect logs and intentional reruns |
-| cache hit rate | restore hits / restore attempts | job logs (`Cache restored from key`) — not in API |
+| cache restoration rate | known successful restores / known restore outcomes; fallback and exact hits remain distinct | explicit per-event restore evidence; neither cache inventory nor a log phrase proves complete coverage |
+| exact-key PR hit rate | exact primary-key hits / all eligible PR restore opportunities in the declared complete population | preserve numerator, denominator, exclusions, unknowns and population identity; missing evidence cannot satisfy >95% |
 | cost per merge | accounted runner cost / merged PRs for the same complete population | dated explicit label/rate/quantum + population identity; observed-minute estimates are not bills |
 
 Unknown stays `unknown`. A report that writes `0` for a missing cache hit rate is wrong.
@@ -66,7 +67,8 @@ A "biggest cost" or "dominant step" claim lists the top five steps by p50 with r
 
 - One variable per experiment. Freeze and record source before/after, toolchain, runner and workload identity. A different-source comparison requires reviewed immutable fingerprints and a scoped allowed difference.
 - ≥10 runs per arm; fewer is `preliminary`. Interleave arms (A B A B) when the runner pool is noisy; the first run on a fresh runner is often slower.
-- Measure cold and warm cache as separate arms.
+- Record every cache layer's starting state. A cold-versus-warm comparison measures a different question from archive-on versus archive-off over the same warm disk. Specify the layer changed and keep all other initial states compatible. See [measured adapters](13-measured-adapters.md).
+- Prepare and verify the declared state before every warmup and sample. Balanced ordering controls order effects; it does not reset a cache warmed by the previous arm. Record preparation and measurement separately, retain failed preparation, and never use an unmeasured reset claim as evidence of a cold trial. Only operate on explicitly reviewed disposable benchmark state.
 - Local: `benchmark.py --label baseline --runs 10 --warmup 1 --metadata context.json --out ... -- <cmd>`, then candidate with `--baseline`, or balanced paired argv inputs. Recorded warmup/sample failures, changed provenance or incomplete process-group cleanup invalidate comparability. Bootstrap intervals and warnings must be interpreted, not suppressed.
 - CI: push the candidate to a branch with `workflow_dispatch`, trigger N times, collect with `collect_gh.py --branch <exp-branch>`.
 
@@ -83,8 +85,8 @@ Experiment record (`experiments/<id>.json`): id, hypothesis, module, variable, b
 For a change measured on real CI rather than with `benchmark.py`:
 
 - Measure push-wide with a stated cohort: earliest relevant event/run receipt → complete authoritative gate for the exact revision, resolving workflows and attempts from raw evidence. `push_to_green_s` is an approximate exploratory summary; verify it independently and name timestamp proxies. Never sum workflow durations or average per-job ratios.
-- Re-run the candidate SHA at least twice; if two runs differ by more than 20% of their median, go to four. Keep the cold first run in the set and report median and range. One rerun of an unchanged SHA in the same window is the noise control.
-- Disclose the asymmetry: the baseline spans many commits, the candidate is a few reruns of one.
+- Predeclare independent experiment runs, arm order, sample count, starting states and stop criteria. Record immutable revisions, workflow/configuration identity, run IDs and attempts, and retain every outcome. Noise controls are planned observations, never retries of a failed acceptance check. A failure requires diagnosis and a new fix; it cannot be replaced by a later green.
+- Keep experimental measurements separate from PR and merge-queue acceptance evidence. Report the observed median and range with sample counts, and retain the cold first trial. Disclose any asymmetry between a many-commit historical baseline and a few planned runs of one candidate; neither proves a stable p95 or causal saving.
 - **Workload state.** Record one of `same`, `reduced`, `increased`, `changed`, `unknown` (default). Only `same`, backed by matching job and test identities, supports "same work, faster". Equal job counts alone are `unknown`; re-sharding is `changed`, not `reduced`. For `increased`, `changed` or `unknown` the delta is not a lower bound on the benefit. A branch that also changes product code cannot be attributed to CI alone.
 - **Gate migration.** Re-derive which job finishes last after the change. If the gate moved to another job, report the new gate and its time, not the old pole's gain as merge-wait saved.
 
