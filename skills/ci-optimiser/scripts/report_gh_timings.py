@@ -15,6 +15,8 @@ MIN_TAIL_RUNS = 40  # Same conservative warning policy as benchmark.py, not a si
 NOTICE = ("Protection and security/merge eligibility are NOT ASSESSED. "
           "This manual timing audit is not a required check or a readiness certificate.")
 PHASES = ("waiting_s", "setup_s", "running_s", "unattributed_s", "overlap_s", "runner_s")
+MAPPED_PHASES = ("setup", "restore", "work", "save", "teardown")
+CLASSIFICATIONS = ("reviewed_map", "preliminary_heuristic", "unknown")
 OUTCOMES = {"success", "failure", "cancelled", "skipped", "neutral", "timed_out", "action_required",
             "stale", "startup_failure", "queued", "in_progress", "waiting", "pending", "unknown"}
 
@@ -54,6 +56,9 @@ def phase(value: dict) -> dict:
                ("observations", "complete_phase_observations", "unknown_phase_observations")},
             **{key: distribution(value.get(key)) for key in PHASES},
             "outcomes": counts(value.get("outcomes", {})),
+            "classification_counts": {key: count(value.get("classification_counts", {}).get(key)) for key in CLASSIFICATIONS},
+            "mapped_phase_s": {key: distribution(value.get("mapped_phase_s", {}).get(key)) for key in MAPPED_PHASES},
+            "unknown_by_mapped_phase": {key: count(value.get("unknown_by_mapped_phase", {}).get(key)) for key in MAPPED_PHASES},
             "unknown_by_metric": {key: numeric(value.get("unknown_by_metric", {}).get(key)) for key in PHASES}}
 
 
@@ -140,6 +145,12 @@ def outcome_summary(row: dict) -> str:
     return ", ".join(f"{name}: {number(value)}" for name, value in sorted(values.items())) or "unknown"
 
 
+def phase_basis(row: dict) -> str:
+    values = row.get("classification_counts", {})
+    return ", ".join(f"{key.replace('_', ' ')}: {values[key]}" for key in CLASSIFICATIONS
+                     if type(values.get(key)) is int and values[key] > 0) or "unknown"
+
+
 def render(metrics: dict | None, status: str) -> tuple[str, bool]:
     valid = bool(metrics and metrics.get("schema") == "ci-timing-audit-metrics/1"
                  and metrics.get("collection_scope", {}).get("name") == "timings-only")
@@ -163,14 +174,17 @@ def render(metrics: dict | None, status: str) -> tuple[str, bool]:
               f"Sample limit reached: {cell(enumeration.get('limit_reached', 'unknown'))}. "
               "Deleted or expired history is unknown. Jobs from all available attempts, including failures, are retained; attempt history is capped at 100 per run and gaps fail collection.", "",
               "## Job phases (seconds: p50 / p95)", "",
-              "These distributions include observed outcomes and attempts. Setup uses the analyzer's documented step-name heuristic. "
+              "These distributions include observed outcomes and attempts. Unmapped setup uses a preliminary step-name heuristic. "
+              "A reviewed map binds workflow/config/job/step identities: setup then spans runner start to first work, matching the budget boundary. "
+              "Map assertions are not independent workflow authentication. "
               "Missing or censored timings remain unknown; percentile components are not additive. "
               "Each metric shows its own observed count (n) and missing count. P95 is preliminary below "
               f"{MIN_TAIL_RUNS} observations or when n is unknown; reaching that count does not establish significance or budget attainment. "
               "All-attempt rows retain every observed outcome; first-attempt and rerun rows are distinct populations. "
               "Workflow/job labels are bounded; raw step names, branch metadata and unrecognized fields are excluded.", "",
-              "| Workflow | Job | Attempt basis | Waiting | Setup | Running | Runner total | Outcomes | Unknown phases |",
-              "| --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
+              "| Workflow | Job | Attempt basis | Attribution | Waiting | Setup | Running | Runner total | Outcomes | Unknown phases |",
+              "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
+    mapped_rows = []
     for workflow, group in metrics.get("workflows", {}).items():
         for name, row in group.get("job_phases", {}).items():
             populations = [("All observed attempts", row)]
@@ -180,9 +194,20 @@ def render(metrics: dict | None, status: str) -> tuple[str, bool]:
                 if observations != "unknown" and observations > 0:
                     populations.append((label, population))
             for basis, population in populations:
-                lines.append("| " + " | ".join([cell(group.get("name", workflow)), cell(row.get("name", name)), basis,
+                lines.append("| " + " | ".join([cell(group.get("name", workflow)), cell(row.get("name", name)), basis, phase_basis(population),
                              *(pair(population, key) for key in ("waiting_s", "setup_s", "running_s", "runner_s")),
                              outcome_summary(population), number(population.get("unknown_phase_observations"))]) + " |")
+            if type(row.get("classification_counts", {}).get("reviewed_map")) is int and row["classification_counts"]["reviewed_map"] > 0:
+                detail = {**row.get("mapped_phase_s", {}), "unknown_by_metric": row.get("unknown_by_mapped_phase", {})}
+                mapped_rows.append("| " + " | ".join([cell(group.get("name", workflow)), cell(row.get("name", name)),
+                                   *(pair(detail, key) for key in MAPPED_PHASES)]) + " |")
+    if mapped_rows:
+        lines += ["", "## Reviewed step phases (all observed attempts, seconds: p50 / p95)", "",
+                  "Step unions below distinguish restore and post-work cost. Setup-step time excludes pre-work gaps; "
+                  "the setup boundary above includes them. Restore is already inside that boundary. "
+                  "Save/teardown remain part of runner total; overlapping phase intervals and percentiles are not additive.", "",
+                  "| Workflow | Job | Setup steps | Restore | Work | Save | Teardown |",
+                  "| --- | --- | --- | --- | --- | --- | --- |", *mapped_rows]
     lines += ["", "Historical CI cost is unknown without dated provider rates and billing evidence. "
               "Cache hit rates and enforced merge-queue/full-suite policy are not established by this report.", ""]
     return "\n".join(lines), complete

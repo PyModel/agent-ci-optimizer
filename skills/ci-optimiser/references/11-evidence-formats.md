@@ -75,6 +75,41 @@ count is unknown; reaching 40 is not a significance test or budget certificate.
 Outcome counts remain visible. The published projection excludes raw step commands
 and unrestricted cohort fields; richer summaries must preserve that boundary.
 
+### Reviewed phase attribution
+
+Without `--phase-map`, phase attribution is a **preliminary step-name heuristic**:
+it can put lifecycle and cache-save work into setup. Use the reviewed
+[phase map](../templates/phase-map.example.json) to distinguish `setup`, `restore`,
+`work`, `save` and `teardown`. Replace every placeholder after inspecting the
+workflow, referenced actions and expanded API job/step inventory. Do not infer a
+phase from a cache-hit label or accept an unreviewed map supplied by a PR.
+
+`ci-phase-map/1` requires `review_reference` and an `entries` list. Each entry binds
+a positive numeric `workflow_id`, `config:sha256:<64 lowercase hex>`, exact
+`job_identity:{field,value}`, numeric `setup_end_step`, and a complete list of
+`steps:{number,phase}`. Identity field is `logical_job_id` when an adapter supplies
+one, otherwise the exact API `name` within this workflow/configuration (including
+matrix values). Step numbers identify the reviewed expanded inventory; display
+names never select the phase. Supply the same config digest in the run's cohort
+context and keep its reproducible source evidence. This is caller-reviewed
+binding, **not independent authentication** of configuration or action code.
+
+The setup marker is the last setup/restore step; all setup/restore must finish
+before the first work step starts, and save/teardown follows all work. Setup is
+runner start to first work start, including gaps, matching `check_job_budgets.py`;
+running is the union of mapped work intervals. `mapped_phase_s` separately reports
+step unions, so restore remains a subset of setup and save/teardown still counts
+toward runner time. Overlap is explicit and uncovered runner time is unattributed.
+Per-observation decomposition includes save/teardown; percentiles are not additive.
+The existing strict budget gate and its explicit work policy are unchanged.
+
+A requested map with a missing or ambiguous binding, config drift, incomplete
+inventory or contradictory boundary produces unknown phases, never a heuristic
+fallback. Known waiting/runner intervals remain visible. Updating configuration,
+action expansion or step order requires a reviewed map update. Legacy coarse
+`setup_share`/`step_duration_s` diagnostics retain their old heuristic meaning;
+use `job_phases` for mapped comparisons and inspect classification counts.
+
 `--pricing` accepts `ci-pricing/1`: `currency`, dated `as_of`, `source`, and a `rates`
 array of `{labels, per_minute, billing_quantum_seconds}`. Match the complete sorted
 runner label set. Estimates exclude plan allowances, storage, transfer and fixed

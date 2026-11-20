@@ -2,7 +2,7 @@
 """Analyze immutable CI snapshots or explicitly unverified legacy raw data.
 
 All latency values are diagnostic proxies, not authoritative merge/release gates.
-Optional --graph, --cohort-context and --pricing inputs declare their assumptions.
+Optional --graph, --cohort-context, --phase-map and --pricing inputs declare their assumptions.
 Missing evidence remains unknown; a partial sample is never certified as complete.
 """
 from __future__ import annotations
@@ -20,6 +20,7 @@ from pathlib import Path
 
 from collect_gh import GhError, check_source_identity
 from graph_metrics import evaluate_graph
+import phase_map as reviewed_phases
 
 UNKNOWN = "unknown"
 NO_INTEGRITY_EXPECTATION = object()
@@ -54,7 +55,7 @@ LIMITATIONS = [
     "Job-name correlation across partial reruns is a fallback; duplicate logical identities make success latency unknown.",
     "Required context matches are name evidence, not verification of app-bound checks, target-branch applicability or required workflows.",
     "Unknown cohort attributes prevent claims that compared runs used equivalent work, cache, trust or configuration.",
-    "Step phase classification is a name heuristic; overlapping setup/execution cannot be attributed by summing times.",
+    "Without a reviewed phase map, step classification is a preliminary name heuristic. Map bindings are caller evidence, not independent workflow authentication.",
     "Nearest-rank percentiles are descriptive; sample thresholds do not establish significance. Correlated runs violate independent-sample assumptions.",
     "Graph counterfactuals model precedence with unlimited capacity, not queueing, resource contention or unexpanded workflow conditions.",
     "Runner-minute and cost estimates require explicit pricing and scope; no plan allowances, public-repo exemptions or self-hosted prices are inferred.",
@@ -458,20 +459,28 @@ def step_metrics(job: dict) -> dict:
 
 PHASE_METRICS = ("waiting_s", "setup_s", "running_s", "unattributed_s", "overlap_s", "runner_s")
 PHASE_CLASSIFICATION = (
-    "Step-name heuristic, not command instrumentation: existing SETUP_STEP names "
+    "Preliminary step-name heuristic, not command instrumentation: existing SETUP_STEP names "
     "include checkout, installs, caches and lifecycle/post steps; other named steps "
     "are running. Waiting excludes dependency/approval delay before job creation. "
     "Unattributed time is runner wall time outside all observed step intervals."
 )
+MAPPED_CLASSIFICATION = (
+    "Reviewed workflow/config/job/step-number map, not independent authentication: "
+    "setup is runner start to first mapped work start; running is mapped work union. "
+    "Restore, save and teardown step unions remain separate in mapped_phase_s. "
+    "Waiting excludes dependency/approval delay before job creation."
+)
 
 
-def phase_observation(run: dict, job: dict) -> dict:
+def phase_observation(run: dict, job: dict, phase_map: reviewed_phases.PhaseMap | None = None) -> dict:
     """Keep incomplete observations out of complete phase latency distributions."""
     result = {key: None for key in PHASE_METRICS}
     number, latest = attempt_number(job), attempt_number(run)
     outcome = job.get("conclusion")
     result.update(attempt=number, outcome=outcome if isinstance(outcome, str) and outcome else UNKNOWN,
-                  gaps=[], phase_state=UNKNOWN)
+                  gaps=[], phase_state=UNKNOWN,
+                  classification="preliminary_heuristic" if phase_map is None else UNKNOWN,
+                  mapped_phase_s={phase: None for phase in reviewed_phases.PHASES})
     gaps = result["gaps"]
     if number is None or latest is None or number > latest:
         gaps.append("missing or inconsistent attempt identity")
@@ -495,7 +504,13 @@ def phase_observation(run: dict, job: dict) -> dict:
     if not isinstance(steps, list) or not steps:
         gaps.append("step inventory absent or empty")
         return result
-    setup, running = [], []
+    entry = None
+    if phase_map is not None:
+        entry, gap = reviewed_phases.select(phase_map, run, job)
+        if gap:
+            gaps.append(gap)
+            return result
+    setup, running, by_number = [], [], {}
     step_gaps = []
     for step in steps:
         if not isinstance(step, dict):
@@ -512,9 +527,43 @@ def phase_observation(run: dict, job: dict) -> dict:
         elif left is None or right is None or not start <= left <= right <= end:
             step_gaps.append("step timing missing, invalid or outside runner interval")
         else:
-            (setup if SETUP_STEP.match(name) else running).append((left, right))
+            if entry is None:
+                (setup if SETUP_STEP.match(name) else running).append((left, right))
+            else:
+                step_number = step.get("number")
+                if not reviewed_phases.positive(step_number) or step_number in by_number:
+                    step_gaps.append("mapped step number is missing, malformed or duplicated")
+                elif by_number and step_number <= max(by_number):
+                    step_gaps.append("mapped step numbers are not in execution order")
+                else:
+                    by_number[step_number] = (left, right)
     if step_gaps:
         gaps.extend(sorted(set(step_gaps)))
+        return result
+    if entry is not None:
+        if set(by_number) != set(entry["steps"]):
+            gaps.append("reviewed phase-map does not match the complete step inventory")
+            return result
+        phases = {phase: [by_number[n] for n, p in entry["steps"].items() if p == phase]
+                  for phase in reviewed_phases.PHASES}
+        first_work = by_number[min(n for n, p in entry["steps"].items() if p == "work")][0]
+        last_work = max(right for _, right in phases["work"])
+        if (any(right > first_work for left, right in phases["setup"] + phases["restore"])
+                or any(left < first_work for left, right in phases["work"])
+                or any(left < last_work for left, right in phases["save"] + phases["teardown"])):
+            gaps.append("reviewed phase-map boundaries conflict with the observed timeline")
+            return result
+        setup_s = (first_work - start).total_seconds()
+        details = {phase: union_seconds(intervals) for phase, intervals in phases.items()}
+        # Setup is a boundary interval, including pre-work gaps, like the budget
+        # gate. Post-work steps still consume runner time and cannot disappear.
+        intervals = [(start, first_work)] + phases["work"] + phases["save"] + phases["teardown"]
+        covered = union_seconds(intervals)
+        result.update(setup_s=setup_s, running_s=details["work"], mapped_phase_s=details,
+                      overlap_s=max(0.0, setup_s + details["work"] + details["save"] + details["teardown"] - covered),
+                      unattributed_s=max(0.0, result["runner_s"] - covered), classification="reviewed_map")
+        if not gaps:
+            result["phase_state"] = "complete"
         return result
     setup_s, running_s = union_seconds(setup), union_seconds(running)
     covered_s = union_seconds(setup + running)
@@ -537,10 +586,15 @@ def phase_summary(observations: list[dict]) -> dict:
                                             for row in observations).items())),
             **{key: dist([row[key] for row in observations]) for key in PHASE_METRICS},
             "unknown_by_metric": {key: sum(row[key] is None for row in observations) for key in PHASE_METRICS},
+            "classification_counts": dict(sorted(Counter(row["classification"] for row in observations).items())),
+            "mapped_phase_s": {phase: dist([row["mapped_phase_s"][phase] for row in observations])
+                               for phase in reviewed_phases.PHASES},
+            "unknown_by_mapped_phase": {phase: sum(row["mapped_phase_s"][phase] is None for row in observations)
+                                        for phase in reviewed_phases.PHASES},
             "gaps": dict(sorted(Counter(gap for row in observations for gap in row["gaps"]).items()))}
 
 
-def job_phase_metrics(runs: list[dict], jobs_by_run: dict[int, list[dict]]) -> dict:
+def job_phase_metrics(runs: list[dict], jobs_by_run: dict[int, list[dict]], phase_map: reviewed_phases.PhaseMap | None = None) -> dict:
     """Retain failed first attempts instead of replacing them with successful reruns."""
     by_job = defaultdict(list)
     for run in runs:
@@ -550,26 +604,45 @@ def job_phase_metrics(runs: list[dict], jobs_by_run: dict[int, list[dict]]) -> d
         seen = set()
         records = jobs_by_run.get(run["id"], [])
         id_records = defaultdict(set)
+        mapped_records = defaultdict(set)
         for job in records:
             payload = json.dumps(job, sort_keys=True)
             if job.get("id") is not None:
                 id_records[str(job["id"])].add(payload)
+            if phase_map is not None:
+                entry, _ = reviewed_phases.select(phase_map, run, job)
+                if entry is not None:
+                    key = (entry["job_identity"]["field"], entry["job_identity"]["value"], attempt_number(job))
+                    mapped_records[key].add(payload)
         for job in records:
             payload = json.dumps(job, sort_keys=True)
             if payload in seen:
                 continue
             seen.add(payload)
-            observation = phase_observation(run, job)
+            observation = phase_observation(run, job, phase_map)
+            if phase_map is not None:
+                entry, _ = reviewed_phases.select(phase_map, run, job)
+                if entry is not None:
+                    key = (entry["job_identity"]["field"], entry["job_identity"]["value"], attempt_number(job))
+                    if len(mapped_records[key]) > 1:
+                        observation.update({metric: None for metric in PHASE_METRICS if metric not in ("waiting_s", "runner_s")})
+                        observation.update(phase_state=UNKNOWN, classification=UNKNOWN,
+                                           mapped_phase_s={phase: None for phase in reviewed_phases.PHASES})
+                        observation["gaps"].append("reviewed phase-map job identity matches multiple records in one attempt")
             if job.get("id") is not None and len(id_records[str(job["id"])]) > 1:
                 observation.update({key: None for key in PHASE_METRICS})
+                observation["mapped_phase_s"] = {phase: None for phase in reviewed_phases.PHASES}
+                observation["classification"] = UNKNOWN
                 observation["phase_state"] = UNKNOWN
                 observation["gaps"].append("conflicting records for one job ID")
             by_job[job_identity(job)].append(observation)
     result = {}
     for name, observations in sorted(by_job.items()):
-        result[name] = {**phase_summary(observations), "classification": PHASE_CLASSIFICATION,
+        result[name] = {**phase_summary(observations), "classification": PHASE_CLASSIFICATION if phase_map is None else MAPPED_CLASSIFICATION,
                         "identity_basis": "logical_job_id when supplied, otherwise job name; exact duplicates removed within each run; conflicting same-ID payloads count as separate invalid observations",
-                        "decomposition": "runner_s = setup_s + running_s - overlap_s + unattributed_s for each complete observation; percentiles are not additive",
+                        "decomposition": ("runner_s = setup_s + running_s - overlap_s + unattributed_s" if phase_map is None else
+                                          "runner_s = setup_s + running_s + mapped_phase_s.save + mapped_phase_s.teardown - overlap_s + unattributed_s")
+                                         + " for each complete observation; percentiles are not additive",
                         "first_attempt": phase_summary([row for row in observations if row["attempt"] == 1]),
                         "reruns": phase_summary([row for row in observations if row["attempt"] is not None and row["attempt"] > 1]),
                         "unknown_attempt": phase_summary([row for row in observations if row["attempt"] is None]),
@@ -578,7 +651,8 @@ def job_phase_metrics(runs: list[dict], jobs_by_run: dict[int, list[dict]]) -> d
     return result
 
 
-def analyze_group(runs: list[dict], jobs_by_run: dict[int, list[dict]], required: set[str] | None = None) -> dict:
+def analyze_group(runs: list[dict], jobs_by_run: dict[int, list[dict]], required: set[str] | None = None,
+                  phase_map: reviewed_phases.PhaseMap | None = None) -> dict:
     metrics = {key: [] for key in ("job_queue_s", "setup_work_share", "step_work_s", "step_wall_coverage_s",
                                   "setup_wall_coverage_s", "setup_wall_share", "execution_excluding_setup_coverage_s")}
     durations, per_step, slowest = defaultdict(list), defaultdict(list), Counter()
@@ -630,7 +704,7 @@ def analyze_group(runs: list[dict], jobs_by_run: dict[int, list[dict]], required
                                                "match_basis": "context name only"} for name, count in slowest.most_common()} or UNKNOWN,
               "gap_to_runner_up_s": dist(gaps), "job_duration_s": {name: dist(v) for name, v in sorted(durations.items())},
               "step_duration_s": {name: dist(v) for name, v in sorted(per_step.items())},
-              "job_phases": job_phase_metrics(runs, jobs_by_run),
+              "job_phases": job_phase_metrics(runs, jobs_by_run, phase_map),
               "jobs_missing_for_runs": sum(r["id"] not in jobs_by_run for r in runs),
               "missing_step_timings": missing_steps, "identity_gaps": identity_gaps}
     result["setup_share"] = result["setup_work_share"]
@@ -891,7 +965,9 @@ def cohort_identity(run: dict, jobs: list[dict]) -> dict:
 
 
 def analyze(runs: list[dict], jobs_by_run: dict[int, list[dict]], meta: dict,
-            required: set[str] | None = None, *, graph: object = None, cohort_context: object = None, pricing: object = None) -> dict:
+            required: set[str] | None = None, *, graph: object = None, cohort_context: object = None, pricing: object = None,
+            phase_map: object = None) -> dict:
+    phase_map = reviewed_phases.validate(phase_map)
     runs = dedupe_runs(apply_cohort_context(runs, cohort_context))
     since = ts(meta.get("since"))
     if since:
@@ -919,6 +995,9 @@ def analyze(runs: list[dict], jobs_by_run: dict[int, list[dict]], meta: dict,
     retry = reliability(runs, jobs_by_run, attempts)
     price = costs(jobs_by_run, pricing, physical["complete"], selected)
     return {"schema": "ci-metrics/2", "purpose": "diagnostic proxies, not gate certification",
+            "phase_mapping": {"status": "reviewed_input", "sha256": phase_map.sha256,
+                              "review_reference": phase_map.review_reference, "independently_verified": False}
+                             if phase_map is not None else {"status": "preliminary_heuristic", "independently_verified": False},
             "collection_scope": meta.get("collection_scope", {"name": UNKNOWN}),
             "source": meta.get("source", "collect_gh.py raw/"), "repo": meta.get("repo", UNKNOWN),
             "collected_at": meta.get("collected_at", UNKNOWN), "snapshot_id": meta.get("snapshot_id", UNKNOWN),
@@ -939,8 +1018,8 @@ def analyze(runs: list[dict], jobs_by_run: dict[int, list[dict]], meta: dict,
             "required_checks": sorted(required) if required is not None else UNKNOWN, "required_check_evidence": required_state,
             "billable_minutes_by_label": physical["rounded_runner_minutes_estimate_by_label"], "runner_usage": physical,
             "pricing": price, "cost_per_merge": price["cost_per_merge_estimate"], "cache_hit_rate": UNKNOWN,
-            "workflows": {key: analyze_group(value, jobs_by_run, required) for key, value in sorted(groups.items())},
-            "cohorts": [{"identity": json.loads(key), "metrics": analyze_group(value, jobs_by_run, required),
+            "workflows": {key: analyze_group(value, jobs_by_run, required, phase_map) for key, value in sorted(groups.items())},
+            "cohorts": [{"identity": json.loads(key), "metrics": analyze_group(value, jobs_by_run, required, phase_map),
                          "missing_attributes": [field for field in COHORT_FIELDS if json.loads(key)[field] == UNKNOWN]}
                         for key, value in sorted(cohorts.items())],
             "graph": evaluate_graph(graph) if graph is not None else {"status": UNKNOWN, "gaps": ["normalized graph absent"]},
@@ -964,6 +1043,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--since", help="only run creation times at/after this timezone-aware ISO-8601 time")
     parser.add_argument("--graph", type=Path, help="normalized ci-job-graph/1 JSON; no YAML inference")
     parser.add_argument("--cohort-context", type=Path, help="ci-cohort-context/1 run annotations")
+    parser.add_argument("--phase-map", type=Path, help="reviewed ci-phase-map/1; unmatched bindings remain unknown")
     parser.add_argument("--pricing", type=Path, help="ci-pricing/1 explicit dated runner rates")
     args = parser.parse_args(argv)
     if args.since and ts(args.since) is None:
@@ -974,6 +1054,7 @@ def main(argv: list[str] | None = None) -> int:
             meta = {**meta, "since": args.since}
         extra = {key: json.loads(path.read_text(encoding="utf-8")) if path else None
                  for key, path in (("graph", args.graph), ("cohort_context", args.cohort_context), ("pricing", args.pricing))}
+        extra["phase_map"] = reviewed_phases.load(args.phase_map) if args.phase_map else None
         metrics = analyze(runs, jobs, meta, required, **extra)
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(metrics, indent=2, allow_nan=False), encoding="utf-8")

@@ -221,6 +221,24 @@ class TimingReportTest(unittest.TestCase):
                 if type(n) is not int or n == 0:
                     self.assertTrue(rendered.startswith("unknown / unknown"))
 
+    def test_reviewed_phase_report_preserves_allowlist_and_post_work_cost(self):
+        metrics = self.metrics()
+        row = next(iter(next(iter(metrics["workflows"].values()))["job_phases"].values()))
+        row["classification_counts"] = {"reviewed_map": 1, "private-context-canary": 99}
+        row["mapped_phase_s"] = {key: analyzer.dist([value]) for key, value in
+                                 (("setup", 2), ("restore", 7), ("work", 10), ("save", 15), ("teardown", 3))}
+        row["mapped_phase_s"]["private-command-canary"] = "secret"
+        row["unknown_by_mapped_phase"] = {key: 0 for key in reporter.MAPPED_PHASES}
+        row["review_reference"] = "private-reference-canary"
+        projected = reporter.project(metrics)
+        report, _ = reporter.render(projected, "success")
+        self.assertIn("reviewed map: 1", report)
+        self.assertIn("Reviewed step phases", report)
+        self.assertIn("15 / 15 (n=1; missing=0; p95 preliminary)", report)
+        self.assertIn("Save/teardown remain part of runner total", report)
+        for canary in ("private-context-canary", "private-command-canary", "private-reference-canary"):
+            self.assertNotIn(canary, json.dumps(projected) + report)
+
 
 if __name__ == "__main__":
     unittest.main()

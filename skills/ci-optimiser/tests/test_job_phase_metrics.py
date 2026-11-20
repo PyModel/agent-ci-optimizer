@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import copy
+import json
 import sys
+import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -10,6 +12,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 import analyze_gh as analysis  # noqa: E402
+import check_job_budgets as budgets  # noqa: E402
+import phase_map as mappings  # noqa: E402
 
 
 def stamp(seconds):
@@ -158,6 +162,147 @@ class JobPhaseMetricsTest(unittest.TestCase):
         self.assertEqual(result["workflows"]["ci [pull_request]"]["job_phases"]["tests"]["observations"], 1)
         self.assertEqual(result["cohorts"][0]["metrics"]["job_phases"]["tests"]["observations"], 1)
         self.assertEqual(result["workflows"]["ci [pull_request]"]["job_duration_s"]["tests"]["p50"], 20)
+
+
+class ReviewedPhaseMapTest(unittest.TestCase):
+    def setUp(self):
+        self.config = "sha256:" + "b" * 64
+        self.run = run(cohort={"config": self.config})
+        self.job = job(start=2, end=32, id=101, run_id=1, head_sha="a" * 40, steps=[
+            step("Checkout", 2, 4, number=1), step("Restore cache", 4, 10, number=2),
+            step("Test", 12, 22, number=3), step("Post cache save", 23, 28, number=4),
+            step("Complete job", 28, 30, number=5)])
+        self.value = {"schema": "ci-phase-map/1", "review_reference": "review/example",
+                      "entries": [{"workflow_id": 10, "config": self.config,
+                                   "job_identity": {"field": "name", "value": "tests"},
+                                   "setup_end_step": 2, "steps": [
+                                       {"number": n, "phase": phase} for n, phase in enumerate(mappings.PHASES, 1)]}]}
+
+    def observe(self):
+        return analysis.phase_observation(self.run, self.job, mappings.validate(self.value))
+
+    def test_boundary_setup_and_separate_restore_save_teardown_keep_runner_cost(self):
+        result = self.observe()
+        self.assertEqual(result["classification"], "reviewed_map")
+        self.assertEqual(result["phase_state"], "complete")
+        self.assertEqual((result["setup_s"], result["running_s"], result["runner_s"], result["unattributed_s"]),
+                         (10, 10, 30, 3))
+        self.assertEqual(result["mapped_phase_s"], {"setup": 2, "restore": 6, "work": 10, "save": 5, "teardown": 2})
+        self.assertEqual(result["runner_s"], result["setup_s"] + result["running_s"]
+                         + result["mapped_phase_s"]["save"] + result["mapped_phase_s"]["teardown"]
+                         - result["overlap_s"] + result["unattributed_s"])
+
+    def test_display_name_cannot_change_reviewed_phase(self):
+        before = self.observe()
+        for row in self.job["steps"]:
+            row["name"] = "save cache and install deps"  # Deliberately misleading and duplicated.
+        self.assertEqual(self.observe(), before)
+
+    def test_map_missing_wrong_config_workflow_or_job_stays_unknown(self):
+        for updates in ({"workflow_id": 11}, {"workflow_id": True}, {"cohort": {}},
+                        {"cohort": {"config": "sha256:" + "c" * 64}}, {"cohort": {"config": "main"}}):
+            with self.subTest(updates=updates):
+                current = {**self.run, **updates}
+                result = analysis.phase_observation(current, self.job, mappings.validate(self.value))
+                self.assertIsNone(result["setup_s"])
+                self.assertEqual(result["classification"], "unknown")
+                self.assertEqual(result["runner_s"], 30)
+                self.assertEqual(result["waiting_s"], 2)
+        self.job["name"] = "another job"
+        self.assertIsNone(self.observe()["running_s"])
+
+    def test_inventory_mismatch_duplicate_reordered_or_missing_numbers_fail_closed(self):
+        original = copy.deepcopy(self.job["steps"])
+        cases = [original[:-1], original + [step("Injected work", 30, 32, number=6)],
+                 [*original[:1], {**original[1], "number": 1}, *original[2:]],
+                 [{**original[0], "number": None}, *original[1:]],
+                 [original[1], original[0], *original[2:]]]
+        for steps in cases:
+            with self.subTest(steps=steps):
+                self.job["steps"] = steps
+                result = self.observe()
+                self.assertIsNone(result["setup_s"])
+                self.assertIsNone(result["running_s"])
+                self.assertTrue(all(value is None for value in result["mapped_phase_s"].values()))
+
+    def test_conflicting_time_boundaries_are_unknown(self):
+        for index, field, seconds in ((1, "completed_at", 13), (3, "started_at", 21)):
+            with self.subTest(index=index):
+                original = copy.deepcopy(self.job)
+                self.job["steps"][index][field] = stamp(seconds)
+                self.assertIsNone(self.observe()["setup_s"])
+                self.job = original
+
+    def test_overlapping_work_and_post_intervals_keep_union_invariant(self):
+        self.job["steps"] = self.job["steps"][:3] + [step("More work", 14, 26, number=4),
+                                                   step("Save", 26, 30, number=5),
+                                                   step("Teardown", 28, 32, number=6)]
+        self.value["entries"][0]["steps"] = [{"number": n, "phase": phase} for n, phase in
+                                            enumerate(("setup", "restore", "work", "work", "save", "teardown"), 1)]
+        result = self.observe()
+        self.assertEqual((result["running_s"], result["overlap_s"], result["unattributed_s"]), (14, 2, 0))
+        self.assertEqual(result["runner_s"], 10 + 14 + 4 + 4 - 2)
+
+    def test_audit_matches_existing_strict_budget_boundaries(self):
+        policy = {"schema": "ci-job-budgets/1", "jobs": {"tests": {
+            "waiting_s": 10, "setup_s": 30, "running_s": 60, "runner_s": 120,
+            "setup_end_step": "Restore cache", "work_steps": ["Test"]}}}
+        checked = budgets.verify({"total_count": 1, "jobs": [self.job]}, policy)
+        self.assertEqual(checked["status"], "pass")
+        audit = self.observe()
+        self.assertEqual(checked["jobs"][0]["measurements"], {key: audit[key] for key in budgets.METRICS})
+        policy["jobs"]["tests"]["setup_s"] = audit["setup_s"]
+        self.assertEqual(budgets.verify({"total_count": 1, "jobs": [self.job]}, policy)["status"], "fail")
+
+    def test_schema_and_ambiguous_identity_are_rejected(self):
+        for field, value in (("workflow_id", True), ("config", "mutable-main"), ("setup_end_step", 3),
+                             ("steps", []), ("job_identity", {"field": "prefix", "value": "test"})):
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                current = copy.deepcopy(self.value)
+                current["entries"][0][field] = value
+                mappings.validate(current)
+        self.value["entries"].append(copy.deepcopy(self.value["entries"][0]))
+        with self.assertRaises(ValueError):
+            mappings.validate(self.value)
+        self.value["entries"][1]["job_identity"] = {"field": "logical_job_id", "value": "test-node"}
+        self.job["logical_job_id"] = "test-node"
+        self.assertIsNone(self.observe()["setup_s"])
+
+    def test_map_propagates_through_analysis_and_cohort_context(self):
+        current = {key: value for key, value in self.run.items() if key != "cohort"}
+        context = {"schema": "ci-cohort-context/1", "runs": {"1": {"config": self.config}}}
+        result = analysis.analyze([current], {1: [self.job]}, {}, phase_map=self.value, cohort_context=context)
+        self.assertEqual(result["phase_mapping"]["review_reference"], "review/example")
+        self.assertFalse(result["phase_mapping"]["independently_verified"])
+        self.assertRegex(result["phase_mapping"]["sha256"], r"^[0-9a-f]{64}$")
+        for group in (result["workflows"]["ci [pull_request]"], result["cohorts"][0]["metrics"]):
+            report = group["job_phases"]["tests"]
+            self.assertEqual(report["classification_counts"], {"reviewed_map": 1})
+            self.assertEqual(report["mapped_phase_s"]["save"]["p50"], 5)
+            self.assertEqual(report["first_attempt"]["unknown_by_mapped_phase"]["restore"], 0)
+
+    def test_two_jobs_sharing_one_mapped_identity_are_unknown(self):
+        other = {**self.job, "id": 102}
+        report = analysis.job_phase_metrics([self.run], {1: [self.job, other]}, mappings.validate(self.value))["tests"]
+        self.assertEqual(report["classification_counts"], {"unknown": 2})
+        self.assertEqual(report["setup_s"], "unknown")
+        self.assertEqual(report["mapped_phase_s"]["save"], "unknown")
+        self.assertEqual(report["runner_s"]["n"], 2)
+
+    def test_duplicate_json_and_null_map_are_not_an_opt_out(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "phases.json"
+            for value in ('{"schema":"ci-phase-map/1","schema":"ci-phase-map/1"}', 'null'):
+                path.write_text(value)
+                with self.assertRaises(ValueError):
+                    mappings.load(path)
+            path.write_text(json.dumps(self.value))
+            self.assertIsInstance(mappings.load(path), mappings.PhaseMap)
+
+    def test_no_map_is_explicitly_preliminary(self):
+        result = analysis.phase_observation(self.run, self.job)
+        self.assertEqual(result["classification"], "preliminary_heuristic")
+        self.assertTrue(all(value is None for value in result["mapped_phase_s"].values()))
 
 
 if __name__ == "__main__":
