@@ -583,7 +583,7 @@ def resolve_target_branch(runs: list[dict], default_branch: str | None, explicit
 
 def collect(gh: Gh, repo: str, limit: int, out: Path, branch: str | None = None,
             event: str | None = None, *, target_branch: str | None = None, created: str | None = None,
-            workflow: str | None = None, include_incomplete: bool = False) -> dict:
+            workflow: str | None = None, include_incomplete: bool = False, timings_only: bool = False) -> dict:
     if not REPO_RX.fullmatch(repo) or not 1 <= limit <= MAX_LIMIT:
         raise ValueError("invalid repository or collection limit")
     started_at = utc_now()
@@ -635,7 +635,19 @@ def collect(gh: Gh, repo: str, limit: int, out: Path, branch: str | None = None,
             attempts_ok.append(run_id)
             if complete:
                 complete_attempts.append(run_id)
-        required = fetch_required_checks(gh, repo, protected_branch, errors)
+        scope = {"name": "timings-only" if timings_only else "full",
+                 "required_checks_requested": not timings_only,
+                 "protection_security_eligibility": "not_assessed" if timings_only else "not_certified"}
+        if timings_only:
+            required = {"schema": "ci-required-checks/2", "branch": protected_branch or "unknown",
+                        "classic_protection": {"unavailable": "not_assessed"},
+                        "rulesets": {"unavailable": "not_assessed"},
+                        "source_status": {name: {"complete": False, "state": "not_assessed", "status_code": None}
+                                          for name in ("classic_protection", "rulesets")},
+                        "completeness": {"complete": False}, "required_identities": [],
+                        "reason": "explicit_timings_only_scope"}
+        else:
+            required = fetch_required_checks(gh, repo, protected_branch, errors)
         required["branch_resolution"] = branch_resolution
         write_json(raw / "required_checks.json", required)
         completeness = {"jobs": len(jobs_ok) == len(runs), "attempts": len(complete_attempts) == len(runs),
@@ -645,6 +657,7 @@ def collect(gh: Gh, repo: str, limit: int, out: Path, branch: str | None = None,
                      "source_identity": source_identity,
                      "consistent_observed_attempts": not any(e["stage"] == "freshness" for e in errors)}
         meta = {"schema": "ci-collect/2", "source": "github-rest via gh api", "repo": repo,
+                "collection_scope": scope,
                 "repository_id": repo_info.get("id", "unknown"), "default_branch": default_branch or "unknown",
                 "snapshot_id": snapshot_id, "snapshot_path": snapshot_path,
                 "protected_target_branch": protected_branch or "unknown", "branch_resolution": branch_resolution,
@@ -667,6 +680,7 @@ def collect(gh: Gh, repo: str, limit: int, out: Path, branch: str | None = None,
             payload = path.read_bytes()
             files[path.relative_to(raw).as_posix()] = {"sha256": hashlib.sha256(payload).hexdigest(), "bytes": len(payload)}
         manifest = {"schema": "ci-snapshot-manifest/1", "repo": repo, "snapshot_id": snapshot_id,
+                    "collection_scope": scope,
                     "collected_at": meta["collected_at"], "selected_run_ids": [r["id"] for r in runs],
                     "jobs_payload_run_ids": jobs_ok, "attempts_payload_run_ids": attempts_ok,
                     "attempts_complete_run_ids": complete_attempts, "required_checks_payload": True,
@@ -695,6 +709,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--created", help="server-side creation date/range, e.g. 2026-11-01..2026-11-17")
     ap.add_argument("--workflow", help="workflow ID or workflow filename for server-side filtering")
     ap.add_argument("--include-incomplete", action="store_true", help="include queued/running/waiting runs; handle censoring in analysis")
+    ap.add_argument("--timings-only", action="store_true",
+                    help="collect timing history only; do not assess protection or merge/security eligibility")
     ap.add_argument("--incremental", action="store_true", help="authenticated ETag requests; never reuse failed fetches")
     ap.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT, help="seconds per API request")
     ap.add_argument("--retries", type=int, default=2, help="maximum GET retries (0-5)")
@@ -713,17 +729,18 @@ def main(argv: list[str] | None = None) -> int:
     try:
         meta = collect(gh_api, args.repo, args.limit, args.out, args.branch, args.event,
                        target_branch=args.target_branch, created=args.created, workflow=args.workflow,
-                       include_incomplete=args.include_incomplete)
+                       include_incomplete=args.include_incomplete, timings_only=args.timings_only)
     except GhError as exc:
         print(f"error: collection failed: {exc}; check gh authentication and repository access", file=sys.stderr)
         return 1
     except OSError:
         print("error: snapshot could not be saved; previous current pointer was not intentionally replaced", file=sys.stderr)
         return 1
-    summary = {key: meta[key] for key in ("repo", "snapshot_id", "runs", "runs_with_jobs", "completeness", "errors")}
+    summary = {key: meta[key] for key in ("repo", "snapshot_id", "runs", "runs_with_jobs", "completeness", "errors", "collection_scope")}
     summary["source_identity"] = meta["freshness"]["source_identity"]["state"]
     print(json.dumps(summary, indent=1))
-    if (not all(meta["completeness"].values()) or not meta["freshness"]["consistent_observed_attempts"]
+    requested = ("jobs", "attempts") if args.timings_only else ("jobs", "attempts", "required_checks")
+    if (not all(meta["completeness"][key] for key in requested) or not meta["freshness"]["consistent_observed_attempts"]
             or summary["source_identity"] != "verified"):
         print("warning: snapshot contains explicit evidence gaps; affected metrics remain unknown", file=sys.stderr)
         return 3

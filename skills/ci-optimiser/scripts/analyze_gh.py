@@ -919,6 +919,7 @@ def analyze(runs: list[dict], jobs_by_run: dict[int, list[dict]], meta: dict,
     retry = reliability(runs, jobs_by_run, attempts)
     price = costs(jobs_by_run, pricing, physical["complete"], selected)
     return {"schema": "ci-metrics/2", "purpose": "diagnostic proxies, not gate certification",
+            "collection_scope": meta.get("collection_scope", {"name": UNKNOWN}),
             "source": meta.get("source", "collect_gh.py raw/"), "repo": meta.get("repo", UNKNOWN),
             "collected_at": meta.get("collected_at", UNKNOWN), "snapshot_id": meta.get("snapshot_id", UNKNOWN),
             "freshness": meta.get("freshness", "unverified_in_memory"),
