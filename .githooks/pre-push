@@ -1,0 +1,5 @@
+#!/bin/sh
+# Git invokes pre-push from the non-bare worktree root; exec preserves its stdin.
+set -eu
+exec python3 scripts/run_budget.py --seconds 9 --label pre-push -- \
+  python3 scripts/pre_push.py "$@"

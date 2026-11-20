@@ -65,4 +65,28 @@ python3 -m unittest discover -s tests -v   # scripts, links, anchors, frontmatte
 actionlint                                  # workflow lint
 ```
 
+## Local pre-push hook
+
+The executable `.githooks/pre-push` enforces a strict nine-second budget. It checks
+the actual pushed diff for whitespace errors, compiles changed Python commit blobs
+for syntax errors, runs the packaging and feature-register contracts, and runs
+`actionlint` when workflows change. Install the reviewed actionlint version before
+pushing workflow changes; missing tools fail the hook.
+
+Inspect `git config --show-origin --get core.hooksPath` and the active hooks
+directory first. If existing hooks are active, integrate this hook through their
+manager so none are disabled. Otherwise enable it for this clone:
+
+```bash
+git config --local core.hooksPath .githooks
+test -x .githooks/pre-push
+```
+
+Push a clean, committed HEAD. The hook supports new branches, force updates, and
+multiple destination branches at that HEAD; it rejects unavailable bases, other
+candidate revisions and tags. Deletion-only pushes explicitly report that no
+source candidate exists. Python syntax compilation is not static typechecking;
+this stdlib repository has no configured formatter or static typechecker. Full CI
+remains required because local hooks cannot govern GitHub API writes.
+
 © 2026 PyModel LLC. MIT [license](LICENSE).
