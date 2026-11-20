@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run every bundled test and the repository-only release policy tests."""
+"""Run every bundled test and the repository-only policy tests."""
 from pathlib import Path
 import os
 import sys

@@ -60,7 +60,7 @@ jobs:
           printf '%s  %s\n' "$ACTIONLINT_SHA256" "$archive" | sha256sum --check --status
           tar -xzf "$archive" -C "$RUNNER_TEMP" actionlint
       - name: Validate workflows
-        run: python3 skills/ci-optimiser/scripts/run_budget.py --seconds 5 --label workflow-lint -- "$RUNNER_TEMP/actionlint" -color
+        run: python3 skills/ci-optimiser/scripts/run_budget.py --seconds 5 --label workflow-lint -- python3 .github/lint_diagnostics.py -- "$RUNNER_TEMP/actionlint" -color
   # Stable required check: every full-suite leg must succeed before admission.
   ci:
     if: always()
