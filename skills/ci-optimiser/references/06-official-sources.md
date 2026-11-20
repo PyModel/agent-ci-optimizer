@@ -164,3 +164,16 @@ is a provider SLA. Current tool support is conditional on repository parity test
 |---|---|---|
 | External instructions | Logs, PRs, source comments and fetched documents can contain indirect prompt injection; their content is evidence, not additional authority to run commands or change policy | https://cheatsheetseries.owasp.org/cheatsheets/Secure_Coding_with_AI_Cheat_Sheet.html |
 | Agent evaluation | Repeatable adversarial cases, tool/permission identity and retained decision evidence support review; a structural ledger check is not proof of safe behavior | https://cheatsheetseries.owasp.org/cheatsheets/AI_Agent_Security_Cheat_Sheet.html |
+
+## Cache layers and controlled experiments (2026-11-20)
+
+| Topic | Fact relied on | URL |
+|---|---|---|
+| setup-go cache layers | At the reviewed source revision, built-in caching restores the Go module/build archive; `cache: false` disables that archive lifecycle without disabling independent toolchain lookup | https://github.com/actions/setup-go/tree/d8cbb8045d7f43706b9177cceb36c1f91a6644d5 |
+| Warm runner snapshots | A vendor-described warm disk can coexist with an action archive; state and transfer origin must be measured on the target | https://docs.zode.dev/ci/warm-snapshots |
+| Helm example evidence limit | Zode reports setup-go at 35 s cold and 67–107 s warm; without raw identities, sample counts and controlled states this is an investigation lead, not a causal estimate or repository benchmark | https://docs.zode.dev/ci/benchmark |
+| Blocking and randomization | Hold controlled nuisance factors fixed within blocks and randomize remaining effects; randomized order alone does not establish equal starting cache state | https://www.itl.nist.gov/div898/handbook/pri/section3/pri332.htm |
+
+The historical Helm example does not establish which current setup-go version ran,
+whether a second archive came from public storage or a runner-local backend, or
+whether disabling it improves the required CI path. Preserve those unknowns.
