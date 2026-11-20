@@ -27,7 +27,7 @@ GitHub docs (2026-11-01):
 
 Consequences:
 - Do not put a required check in a workflow filtered out for eligible candidates. An aggregate with `if: always()` still cannot run if its parent workflow never triggers.
-- Aggregate pattern: trigger the required workflow on every eligible candidate; put selection on individual jobs. Include the selector and every candidate job in the aggregate's `needs`. Require a successful selector and each expected job's success. An intentional skip must be explicitly authorized for that job and event by valid selector evidence. Missing/unknown selector results, failures, cancellations, and unexpected skips never pass.
+- Aggregate pattern: trigger the required workflow on every eligible candidate; put selection on individual jobs. Include the selector and every candidate job in the aggregate's `needs`. Require a successful selector and each expected job's success. An intentional omission is limited to verified PR feedback selection. On merge_group, selection is disabled and every full-suite job and shard must execute successfully; selector-authorized omissions cannot satisfy that gate. Missing/unknown selector results, failures, cancellations, and unexpected skips never pass.
 - Renaming a job renames its check context. Keep names, or update branch protection/rulesets in the same change with owner approval.
 - Merge queue: workflows must also trigger on `merge_group`, or required checks never report for queued PRs.
 

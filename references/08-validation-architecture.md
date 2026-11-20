@@ -1,6 +1,6 @@
 # Four validation categories
 
-Use this reference when reorganizing validation across PR, integrated-main and release workflows. Adapt it to the detected provider and stack; categories describe evidence, not mandatory job names or new tooling. Keep the [security invariants](03-security-correctness.md) and [measurement rules](04-measurement-benchmarking.md).
+Apply the [strict performance contract](14-two-minute-ci.md) first. Use this reference when reorganizing validation across PR, integrated-main and release workflows. Adapt it to the detected provider and stack; categories describe evidence, not mandatory job names or new tooling. Keep the [security invariants](03-security-correctness.md) and [measurement rules](04-measurement-benchmarking.md).
 
 ## Contents
 
@@ -20,55 +20,50 @@ Use this reference when reorganizing validation across PR, integrated-main and r
 |---|---|---|---|
 | 1. Code rules | Does the code meet the repository's rules? | Formatting, lint, static analysis, type and policy checks | Authoritative CI for the change; optional local feedback |
 | 2. Change correctness | Does this change behave correctly? | Relevant unit, contract, integration and regression tests; affected builds | PR acceptance, with FULL fallback for risk or uncertainty |
-| 3. Integrated main | Does the complete integrated revision work? | Full required suite and compatibility/build checks on a merge candidate or exact main commit | Before integration through a queue, or after push under an explicitly accepted policy; always before release eligibility |
+| 3. Integrated main | Does the complete integrated revision work? | Full required suite and compatibility/build checks on a merge candidate or exact main commit | Full required suite on the combined queue candidate before main admission; always before release eligibility |
 | 4. Release readiness | Can this exact artifact be released and operated safely? | Packaging/provenance, staging, migration compatibility, feature-gate and progressive-rollout evidence | Release/promotion gate; deployment still needs its own authorization |
 
 Inspect script bodies, configuration, selected files, flags, exit propagation and emitted artifacts. A command named `lint` may also build or test; `check` may do neither. Record unique failure modes and seeded failures it catches. A command can supply several categories; split it only when dependencies and enforcement remain explicit. Unknown behavior stays unclassified and cannot justify deleting a gate.
 
 ## PR feedback budget
 
-Propose `pr_feedback_budget_s = 300` (approximately five minutes) only as a configurable starting objective. Record the owner's chosen budget and measured baseline separately; never report 300 seconds as an observed result. Measure p50/p95 end to end, including queue, setup, all required PR work, retries and aggregate reporting:
+Target latest-revision PR feedback p50 <120 seconds and p95 <180 seconds. Record the owner's chosen budget and measured baseline separately; never report the targets as observed results. Measure p50/p95 end to end, including queue, setup, all required PR work, retries and aggregate reporting:
 
 | Metric | Start | Finish and interpretation |
 |---|---|---|
-| Latest-revision PR feedback | Provider receipt of the exact pushed revision | Authoritative PR gate succeeds for that revision while it is current; primary CI feedback objective |
+| Latest-revision PR feedback | Provider receipt of the exact pushed revision | Authoritative PR gate reports a trustworthy success or genuine failure for the current revision; report outcomes separately |
 | First-push PR journey | First pushed revision in the defined PR observation window | First current revision achieves the complete PR gate; includes repair/re-push delays and shows the user's total wait |
 
-State whether the budget targets latest-revision feedback, first-push journey or both; report both. Use actual push/event timestamps, not author/commit dates. If unavailable, mark the metric unknown or name the run-created proxy explicitly. Keep failed, cancelled, superseded and still-unvalidated observations visible with counts/ages; successful-only percentiles do not describe the whole loop. Record sample size, cohort, config era and cache state; small-sample p95 is preliminary.
+Latest-revision feedback measures time to a trustworthy result; time to green also includes repair/re-push delay. Cancelled, superseded, unfinished and budget-aborted runs retain explicit censored/breach status. Existing helper success-latency proxies do not implement this broader result metric. State which metric each observation covers and report both. Use actual push/event timestamps, not author/commit dates. If unavailable, mark the metric unknown or name the run-created proxy explicitly. Keep failed, cancelled, superseded and still-unvalidated observations visible with counts/ages; successful-only percentiles do not describe the whole loop. Record sample size, cohort, config era and cache state; small-sample p95 is preliminary.
 
-A timeout bounds a stuck process; it is not a feedback budget. Exceeding the budget triggers diagnosis, capacity/scheduling changes or an explicit revised objective. It never authorizes skipping tests, downgrading checks, masking failure or declaring unfinished work green. High-risk changes may legitimately require a longer PR path.
+A timeout bounds a stuck process; it is not a feedback budget. Enforce measured per-run stage/job budgets with a nonpassing result at or above the limit. Diagnose breaches and change capacity or scheduling; do not silently revise the objective. It never authorizes skipping tests, downgrading checks, masking failure or declaring unfinished work green. High-risk changes may legitimately require a longer PR path.
 
 ## Placement algorithm
 
 1. Inventory the four categories, current commands, unique failure modes, required check identities and trust boundaries. Mark absent evidence unknown; retain the current protection until replacement is proven.
-2. Select a main-integration policy below. Document which evidence must precede PR acceptance, integration, artifact eligibility and release. Moving a check later changes risk even when it still runs.
+2. Verify and configure the required full-suite merge queue/train. Document the evidence preceding PR feedback, queue admission, artifact eligibility and release; report unavailable enforcement as a blocker.
 3. Map the diff through verified dependencies and change-to-check contracts. Run relevant category 2 tests on PRs; treat security/authentication, payments, schema/migrations, shared contracts, generated inputs, CI/selector policy and other declared high-risk changes conservatively. High risk or unknown base/graph/coverage/confidence forces FULL before integration.
 4. Retain category 1 rules and every uniquely required test at its approved boundary. Include transitive dependents and non-code inputs. Do not infer relevance from filenames alone or skip integration tests solely because they are slow.
-5. Optimize the measured required path using the seven modules. Optional hooks can mirror fast checks; CI remains authoritative and hook bypass never counts as proof.
+5. Optimize the measured required path using the seven modules. Install a measured <9-second pre-push hook for applicable checks; CI remains authoritative and hook bypass never counts as proof.
 6. Validate selected-versus-full equivalence and gate failures in shadow mode before migrating. If safe placement cannot meet the budget, keep the protection and report the trade-off.
 7. Require full integrated evidence plus category 4 evidence for the exact release artifact. A later lane cannot retroactively protect an earlier boundary.
 
 ## Integrated-main policy
 
-| Policy | Behavior | Preconditions and residual risk |
-|---|---|---|
-| Merge queue / merge train | Validate the candidate combined with the current target branch and queued predecessors; admit it only after required checks pass | Correct provider event/ref, bounded queue concurrency and full integrated checks; invalidated candidates need fresh evidence |
-| Accepted post-push rolling CI | Integrate under the approved PR policy, then fully validate explicit immutable main revisions | Owner explicitly accepts that main can be broken before detection; block releases from unvalidated revisions and define repair/rollback ownership |
+Require a merge queue/train to validate the combined candidate against the current
+base and queued predecessors. Admit it only after the full required suite and stable
+aggregate pass. On GitHub subscribe to `merge_group`, disable affected selection and
+test-result cache reads on that event, and verify the active provider rule requires
+all queue entries to pass. Post-push or nightly verification is supplemental only.
 
-Prefer pre-integration validation when main must stay verified. If the provider has no queue, use its supported equivalent or retain a full updated-branch gate. Never silently substitute post-push validation to meet the PR budget. On GitHub, required Actions checks need the `merge_group` event for queue candidates; a PR run is not a queue run ([official guide](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue), checked 2026-11-17).
+Keep queue/main concurrency groups unique; cancel superseded PR runs only. Missing
+queue access or unsupported provider semantics is a reported blocker, not permission
+to admit untested main. Preserve checks while preparing activation.
 
-For rolling CI, record this policy before adopting it:
-
-| Control | Required decision |
-|---|---|
-| Candidate selection | Every main revision or explicitly permitted coalescing to selected revisions; superseded untested commits remain ineligible |
-| Cancellation | Which unstarted/running validations may be superseded; cleanup behavior; never cancel the only path to fresh green indefinitely |
-| Progress guarantee | Let a designated full run finish, reserve capacity, or pause intake after bounded postponement; specify the bound |
-| Backpressure | Queue-depth/age limits and the approved action when exceeded: throttle integration, reserve capacity or stop promotion |
-| Green age | Maximum age of completed evidence and permitted commit distance behind head; stale green blocks promotion until refreshed |
-| Failure response | Alert owner, stop unsafe integration/promotion as policy requires, repair/revert, then validate the resulting exact revision |
-
-Measure validation lag, oldest unvalidated revision, cancellation rate and time since the last eligible full green. A branch that keeps receiving commits while every full run is cancelled has no functioning integration gate. A scheduled full run is a backstop, not proof for a different revision.
+The evaluator still reads historical `rolling` and `all_pr` policy records for
+compatibility and diagnosis. Those modes do not satisfy this skill's strict contract.
+Their output is not proof that a queue rule exists or that it controlled admission.
+See [queue and cancellation](14-two-minute-ci.md#queue-and-cancellation).
 
 ## Exact evidence and artifact eligibility
 
@@ -79,7 +74,7 @@ Bind each gate result to immutable evidence. Retain this minimal record in the p
 | Source identity | PR head, base, tested merge-candidate SHA, final main SHA and their verified relationship; repository and event |
 | Workload identity | Commands, selected/full test identities, expected shard inventory, coverage, dependency graph and relevant configuration |
 | Policy fingerprint | Digest of validation/selection policy, workflow and trusted dependencies/toolchain versions, relevant build inputs/environment; no secrets |
-| Execution identity | Run/attempt, runner/platform, times, conclusions, evidence links and authorized intentional skips |
+| Execution identity | Run/attempt, runner/platform, times, conclusions, evidence links and verified PR-only selection omissions; no omitted queue obligations |
 | Artifact identity | Content digest, build source SHA, builder/workflow provenance, toolchain/config fingerprint and release target |
 | Eligibility | Required categories satisfied, completion time/expiry, accepted policy and unresolved failures |
 
@@ -105,9 +100,9 @@ Choose the existing platform's rollout mechanism; do not require Kubernetes or a
 
 ## Worked examples
 
-**Polyglot service (Go API + Next.js UI).** Inspect actual scripts first. Category 1 may include formatting/static checks and route-aware type validation. Category 2 runs relevant Go/UI tests plus changed API contracts; payment/auth/schema changes force FULL. Propose a 300-second latest-revision p95 objective, with observed values initially unknown. Category 3 validates the integrated backend/frontend and required platform/database matrix through the existing merge queue. If only rolling CI is available, record accepted broken-main risk and block promotion until the exact tested main revision has fresh evidence. Category 4 validates the immutable application artifacts, schema compatibility and a telemetry-gated staged release; a feature flag does not replace migration checks.
+**Polyglot service (Go API + Next.js UI).** Inspect actual scripts first. Category 1 may include formatting/static checks and route-aware type validation. Category 2 runs relevant Go/UI tests plus changed API contracts; payment/auth/schema changes force FULL. Target latest-revision p50 <120 seconds and p95 <180 seconds, with observed values initially unknown. Category 3 validates the integrated backend/frontend and required platform/database matrix through the existing merge queue. If a queue is unavailable, prepare the configuration and report activation as blocked; do not merge. Category 4 validates the immutable application artifacts, schema compatibility and a telemetry-gated staged release; a feature flag does not replace migration checks.
 
-**Small library.** If the full required suite already meets the chosen PR objective, keep it on every PR. Run formatting/types/API checks and full tests together if that is cheapest; no graph, shards, hosted cache or queue migration is required merely to fill four categories. Validate integrated main using the existing approved policy. Category 4 verifies the built package, declaration/API compatibility, installation and supported consumers before an authorized publication. Use release-candidate consumers or staging instead of traffic percentages; preserve the exact package digest.
+**Small library.** If the full required suite already meets the chosen PR objective, keep it on every PR. Run formatting/types/API checks and full tests together if that is cheapest; no graph, shards or dependency cache is required merely to fill four categories. Still require full pre-main merge-queue verification. Category 4 verifies the built package, declaration/API compatibility, installation and supported consumers before an authorized publication. Use release-candidate consumers or staging instead of traffic percentages; preserve the exact package digest.
 
 ## Sources
 

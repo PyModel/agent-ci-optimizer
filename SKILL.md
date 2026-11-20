@@ -2,121 +2,102 @@
 name: agent-ci-optimizer
 description: >-
   Use when CI is slow, flaky or expensive, agents wait on checks, or someone
-  asks for faster runners (Blacksmith, Depot, larger runners), Oxlint, bun
-  check or TypeScript 7 tsc, Vitest sharding or isolate:false, cache or
-  blobless-clone fixes, parallel jobs, affected tests (Nx, Turborepo), or
-  local hooks, PR latency budgets, merge queues, full-suite scheduling, or
-  release gates. Detect and design four validation categories for any repo
-  and CI provider; evidence-first and read-only until authorized.
+  asks for faster runners, Blacksmith, Oxlint, Oxfmt, Bun, TypeScript 7,
+  tsrs, Vitest sharding or isolate:false, caches, blobless clones,
+  parallel jobs, affected tests, pre-push hooks, latency budgets or merge
+  queues. Audit the last 150 runs, preserve full pre-merge verification,
+  prove tool coverage and negative controls, then make measured small PRs.
 ---
 
 # Agent CI Optimizer
 
-## Mission
+## Mission and rules
 
-Reduce **push → trustworthy green → merge → production** time, not only a job's elapsed time. Measure queueing, setup, checkout, dependency fetch, execution, critical path, retries, and approval wait. A false-green pipeline is a worse regression than a slow one.
+Make CI as fast as possible without letting it lie. Target **PR feedback p50 <120 seconds and p95 <180 seconds**, including dispatch, waiting, setup, execution and final required-check reporting. Keep observed timings separate from targets and runner billing.
 
-This is an investigative skill, not blanket authorization to modify CI. **Start in OBSERVE.** Use the most local evidence available; every timing, cost, version and vendor claim comes from a measurement or a dated source.
+Two rules outrank speed:
 
-### Modes
+1. **Run the full required suite before anything reaches main, on the combined candidate in a merge queue.** Enumerate the baseline suite, new tests, platform/database variants, build/type/coverage and migration obligations; existing branch-protection entries alone do not define completeness. Selection may narrow PR feedback only. Execute tests afresh on the queue; bypass test-result caches, retain dependency caches. Post-push or scheduled tests cannot substitute for this gate. If the provider cannot enforce it, report the blocker and do not merge.
+2. **Never hide a failure.** No check/test/download retries, broader timeouts, dropped tests, flaky-test quarantine, weakened assertions, ignored exit codes or changed coverage thresholds to obtain green. Diagnose the first failure, fix its cause and validate a new revision. Keep failed attempts visible. Repeat planned benchmark trials and shuffled-order experiments without replacing failed results.
 
-| Mode | Allowed action | Exit condition |
+Start with the [strict performance contract](references/14-two-minute-ci.md). It controls the defaults in this skill and takes precedence over historical compatibility examples. Current source and migration details are in [toolchain migration](references/15-toolchain-migration.md). Honor explicit user instructions and already granted authorization.
+
+## Scope and autonomy
+
+Infer the requested repository and scope, then verify its actual code. Apply JS/TS choices only to JS/TS projects; record other stacks as not applicable with evidence. Keep a cheap full PR suite when selection would add overhead or risk. Do not claim vendor benchmark numbers as this repo's results.
+
+| Mode | Work |
+|---|---|
+| `OBSERVE` | Read code, config, protection, logs and billing evidence; produce the baseline. An audit-only request stays read-only. |
+| `EXPERIMENT` | Use isolated branches for authorized candidate and negative-control runs; preserve all outcomes. |
+| `IMPLEMENT` | Complete authorized reversible work, validate it and open one small PR per intervention. |
+| `MONITOR` | Inspect real CI for regression and proposed rollback; schedule recurring work only when requested. |
+
+Reuse authorization in the conversation. Do all useful, authorized preparation before asking. Collect missing accounts, app installations, secrets, admin capabilities and incremental spending into **one concrete list with expected monthly cost and assumptions**. Do not buy capacity or connect billing without authorization. Never bypass protection to finish a task, and never run untrusted PR code with privileged credentials.
+
+## Audit before editing
+
+1. Read repository guidance, workflows and command implementations. Resolve required check identities, provider rules, main admission, deployments and trust boundaries. Read relevant history before changing a deliberate choice.
+2. Collect the **last 150 runs**, paginating runs, jobs and attempts. Retain failures, cancellations and incomplete work. If fewer exist, report the actual count and retention/access limits. Prefer the user's requested connector; otherwise use `collect_gh.py --limit 150 --include-incomplete --retries 0` with reviewed read-only access.
+3. For **each job**, report waiting, setup and running p50/p95, sample count, event/configuration era, runner class, outcomes and attempt. Expose teardown/unattributed time and overlapping intervals. Missing step timing is unknown, never zero. Separate dependency delay from runner waiting and first attempts from reruns.
+4. Measure the whole required path and total runner use separately. Name run-created latency as a proxy when push receipt is unavailable. Do not add percentiles or overlapping job savings. Rank the biggest measured bucket first; do not assume tests are the bottleneck.
+5. Inventory effective rules, formatted files, typecheck projects, tests, coverage, build outputs and dependency graph. Record exact baseline commit, tool versions and price date. Use the [field guide](references/12-field-guide.md) and [measurement rules](references/04-measurement-benchmarking.md).
+
+## Budgets and defaults
+
+Treat all limits as strict: reaching the limit fails it. Enforce per-run stage/job budgets in CI; evaluate p50/p95 from a rolling comparable cohort. A timeout is not a passing measurement. Unknown evidence cannot certify a budget.
+
+| Area | Budget / preferred change | Adoption evidence |
 |---|---|---|
-| `OBSERVE` (default) | Read code/config/logs, collect read-only metrics, prepare proposals | Baseline and trust boundaries documented |
-| `EXPERIMENT` | When authorized, run a candidate in an isolated, non-production branch | Reproducible benchmark and safety results |
-| `IMPLEMENT` | When authorized, change one intervention in a reviewable PR | Required checks pass; gain or policy trade-off evidenced |
-| `MONITOR` | Read telemetry, flag regressions, propose rollback | Protected gates unchanged |
+| Waiting | <10 s per job; migrate **every job**, including tiny aggregates, to Blacksmith once app access is ready | Same-commit queue and total time; isolation, concurrency, architecture and actual cost. Keep another runner only with a measured reason or named activation blocker. |
+| Setup | <30 s; >95% exact PR dependency-cache hits, seeded by trusted main | Cache `node_modules` itself for applicable JS projects; exact compatibility keys, frozen cold path and measured restore benefit. Use full-history `filter: blob:none`. |
+| Lint | <5 s; Oxlint | Enable applicable rules/plugins, compare effective rules, paths and diagnostics, and seed violations. Retain only specifically missing checks until equivalence is proven. |
+| Typecheck | <5 s; `bun check --no-script`, TypeScript 7 fallback; tsrs locally | Whole-project/dependent coverage, supported compiler options and declaration/build obligations. Never substitute an unrelated package script or partial lint coverage. |
+| Format / install | Oxfmt; Bun install and scripts | Compare formatting inventory/plugins and frozen lockfile/lifecycle/native dependency behavior. Delete old tooling after coverage and behavior parity. |
+| Tests | <60 s per shard; benchmark 8-core workers before multiplying shards | Duration-balanced complete inventory, CPU/memory-aware worker counts and independent database per shard; isolate concurrent worker data too. |
+| App reuse | Vitest `isolate: false` for suites whose cleanup is proven | Executable cleanup after each file, contract in `AGENTS.md`, recorded random seeds, leak probes and unchanged full-suite coverage. |
+| Shape | Independent lint, types, build and tests in parallel | Preserve real dependencies and a stable fail-closed aggregate. Separate migrations and unrelated apps from the slowest job without moving them beyond the merge gate. |
+| Selection | PR-only Nx/Turbo affected or a verified stack graph | Unknown inputs select FULL. Deliberately hide a relevant real change; the selection guard/full-suite oracle must go red. Queue always executes FULL. |
+| Local | <9 s actual pre-push hook | Changed-file format/lint plus typecheck of affected projects/dependents; prove installation and nonzero propagation. CI stays authoritative. |
 
-Buying runner capacity, connecting billing, changing branch protection or rulesets, merging, deploying, rotating secrets, deleting checks or tests, force-pushing, and writing to production each need **explicit authorization** for that action. Approval of an audit covers the audit only. Untrusted PR code never runs in a privileged context.
+## Validation architecture
 
-Reuse authorization already given in the conversation. A request to implement this skill or a concrete change authorizes that scoped work; do not repeatedly ask for the same permission. Resolve ordinary reversible implementation choices autonomously.
+Use [four validation categories](references/08-validation-architecture.md) to map commands and guarantees, not just job names:
 
-## Suitability
+| Category | Enforcement boundary |
+|---|---|
+| `rules` | Format, lint, types and policy checks in authoritative CI; fast executable hooks locally. |
+| `change` | Edited and affected tests/dependents on PRs, FULL for uncertainty or high-risk changes. |
+| `integration` | Full suite on each combined queue candidate **before main admission**, regardless of PR selection. |
+| `release` | Exact validated source and artifact with product-specific compatibility, provenance and rollout evidence; deployment authorization remains separate. |
 
-Activate modules only for the detected stack: JS/TS modules stay out of non-JS repos; affected-task tooling (Nx, Turborepo) only where a project graph exists or the benefit is measured; provider migrations only on this repo's benchmark, never a vendor's. A clear `NOT APPLICABLE` beats speculative tooling.
+Keep `ci` or the existing required identity stable. On GitHub, add `merge_group: {types: [checks_requested]}` and verify a provider rule requires the queue and the full aggregate. Workflow YAML alone does not enforce main admission. Use PR-specific concurrency; give queue/main runs unique groups so a later pending run cannot replace an earlier candidate.
 
-## Design four validation categories first
+## Experiment and ship
 
-Read [validation architecture](references/08-validation-architecture.md) before proposing test selection, gate movement or a CI redesign. Classify actual commands and guarantees, not job names; one job can contain multiple categories.
+1. **One change at a time.** Run old/new on the same source and workload before replacing tools. Record diagnostics, missing rules/files, test IDs/count/coverage, build/declaration outputs, elapsed time and memory. Pin versions and include cold/warm paths.
+2. **Prove red.** Exercise real broken behavior and assert nonzero through the required gate. Cover child failure, cancellation, unexpected skip, missing shard/report, stale revision and malformed selection. An intentionally expected failure in a regression test is not permission to swallow failures in CI.
+3. **Enforce budgets.** Use a monotonic command guard such as `scripts/run_budget.py` for work duration and provider job timestamps for waiting/setup. Keep the enforcement/reporting lane itself bounded. Do not widen limits or exclude slow observations to make the dashboard green.
+4. **Open one small PR per intervention.** Include linked real before/after runs, exact commits, sample size, full inventory/coverage evidence, misses, cost assumptions and rollback. Label small samples preliminary; do not manufacture 150 observations or infer p95 from a single run.
+5. **Validate on CI.** Report total required-path time, total runner minutes and estimated/actual cost, before and after. Recompute the path after each change. Merge only through the configured full-suite queue when authorized; do not use admin bypass.
 
-| Category | Question | Default design to evaluate |
-|---|---|---|
-| `rules` | Does the code follow our rules? | PR lint, formatting and compilation/type checks; fast equivalents in pre-commit/pre-push hooks |
-| `change` | Does this change work? | Edited tests **and** affected tests/dependents, contracts and risk-specific checks on every PR; FULL when confidence is missing |
-| `integration` | Does integrated main work? | Full verification on merge candidates, or an explicitly accepted post-push rolling policy; retain verified commit/artifact records |
-| `release` | Is the product ready to release? | Promote only verified inputs through product-appropriate staging, compatibility and telemetry gates; progressive rollout where supported |
+Use the [audit template](templates/audit-report.md), [PR template](templates/optimization-pr.md) and [agent brief](templates/agent-prompt.md). Missing account or provider access does not excuse unfinished local work; prepare the exact change, tests and costed activation steps first.
 
-Detect the provider, product type, commands, graph, triggers, protected checks, deployment model and telemetry. Use discovery's `validation_topology` only as evidence pointers; unresolved categories/policies stay `unknown`. Produce `validation-plan.md` with current → proposed placement, triggers, command/check identity, selection and fallback, confidence/source, budget, full-suite policy, release provenance, owners and rollback. Keep a cheap full PR suite when selection would add more risk or overhead.
+## Integrity invariants
 
-Propose a configurable **300-second p95 PR feedback budget** unless the repo supplies one; it is a target, not an observed baseline or a timeout. Include queue/setup/retries and report approval wait separately. A completed run over budget triggers agent investigation; an agreed rolling breach triggers optimization, never deleted validation or a forced green. Report full-suite freshness, merge-queue latency and total runner use alongside PR latency. No automated recurring work is installed without a request.
-
-## Entry checklist
-
-Read the [field guide](references/12-field-guide.md#entry-checklist-before-any-change)
-for commands and the audit contract. Establish scope, repo policy and protected
-checks; inventory the stack; map trust boundaries; collect immutable observations;
-then separate queue, setup, work, retries and gates. Do not print raw logs or
-sensitive config. Missing, inaccessible or incomparable data is **unknown**, never 0.
-
-## Seven mandatory optimization modules
-
-**Evaluate every module; activate only those the stack and measurements support.** Recipes, counterexamples and verified tool facts: [optimization playbook](references/02-optimization-playbook.md).
-
-| Module | Candidate experiment | MUST pass before adoption |
-|---|---|---|
-| **1. Fast runners** | Benchmark stock, larger, and approved third-party ephemeral runners (Blacksmith, Depot) on the same commit and workload | Comparable p50/p95 queue + total time; price, concurrency limits, isolation, data residency, trust boundary and cancellation verified; explicit spend approval |
-| **2. Native lint/typecheck** | JS/TS only: Oxlint vs ESLint; `bun check --no-script` or TypeScript 7 `tsc` vs current `tsc` | Rules, plugins, ignores and diagnostics diffed; missing rules kept in an ESLint fallback; declaration emit and build gates retained; enforcement equal or stronger |
-| **3. Bigger machines / Vitest reuse** | Matrix of runner CPU × shards × workers; `isolate: false` only for independently safe Vitest projects | Full suite green under shuffled order, global-state leak checks, same coverage, stable flake rate; isolation kept for stateful/integration suites |
-| **4. Caching / blobless clone** | Lockfile-aware cache keys, scoped cache writes, less setup; `filter: blob:none` with the history affected tools need | Cold path correct; restore cheaper than rebuild; untrusted runs cannot write caches trusted runs restore; diff/affected/history tools still work |
-| **5. Parallel jobs** | Run independent lint, types, build, test concurrently; drop unneeded `needs` | One aggregate required check still fails on any child failure; no oversubscription, setup explosion, or hidden ordering |
-| **6. Affected tasks** | Nx affected / Turborepo / Bazel / Pants / Gradle **only with a project graph**; [fail-closed selector](scripts/select_affected.py) as fallback and test oracle | Correct merge-base, graph coverage, transitive dependents, config/contract triggers, adversarial diffs; unknown inputs force FULL |
-| **7. Local hooks** | Fast pre-commit format/lint; pre-push project checks when measured cheap | Reproducible on supported platforms, failure propagates, emergency escape hatch, **CI stays authoritative** (hooks are bypassable) |
-
-### Strict safety invariants
-
-- A green required check comes only from passing work: never from a hidden skip, `continue-on-error`, unconditional `|| true`, an unexpected `if`, missing tests, or a default-branch-only filter.
-- Required check **names and identities** stay stable, or move explicitly with protected-branch owner approval. On GitHub, trigger required workflows for every protected candidate: an aggregate cannot run inside a filtered-out workflow. Gate conditional jobs through an event-aware aggregate; allow only explicitly proven intended skips.
-- `pull_request_target`, `workflow_run` and similar privileged triggers never execute fork code with secrets or write permissions. Releases and deployments run in isolated privileged jobs.
-- Cache keys include every correctness input: lockfiles, toolchain versions, platform/ABI, build-relevant env and config. Trusted runs restore only caches trusted runs wrote.
-- Without a correct base commit, dependency graph, coverage mapping, or selector confidence, run FULL. Change-to-check contracts cover schemas, generated code, migrations, security policies and CI files.
-- Test isolation is removed per suite, opt-in, with evidence of no cross-file leakage; a timing target is never the reason.
-- Category 3 must complete under the accepted merge-queue/post-push policy before a commit/artifact becomes release-eligible. Scheduled verification supplements it; a schedule alone does not certify untested commits. A latest green PR, mutable branch name or unchecked rebuild is insufficient release evidence.
-- Actions and images are pinned and dependencies locked per repo policy; runners are ephemeral and least-privilege.
-- Every optimization has one-variable attribution, a rollback plan, and monitoring.
-
-## Operating workflow
-
-1. **Diagnose:** rank evidence-backed savings on the required path and total runner
-   work separately; never add savings from overlapping jobs.
-2. **Experiment:** pin source, workloads, inputs and environment; pair observations,
-   compare cold/warm paths, retain failures and quantify uncertainty.
-3. **Verify and ship:** one independently reversible intervention at a time, with
-   equivalent checks/coverage, negative gate tests and the authorized review.
-4. **Monitor:** confirm on real comparable CI, keep the full-suite oracle and exact
-   release eligibility, and roll back on false green or a breached policy.
-
-Follow the [field guide](references/12-field-guide.md#operating-workflow) and its
-[output contract](references/12-field-guide.md#mandatory-output-contract). Load the
-[measured adapters](references/13-measured-adapters.md) only for the claims being tested.
-Keep helper outputs distinct from provider policy, quality signoff and release authorization.
-
-## Stop and escalate
-
-If authorization is absent, stop before changing paid runners/providers, secrets, release policy, protected checks, privileged execution, test coverage, security scanning, major runtime/build versions or production infrastructure. Explain the specific boundary. Never install hooks from untrusted code. When data are missing, report the gap instead of a gain.
+- Require every intended child to succeed; unexpected skipped, cancelled, timed-out or absent work fails. Keep workflow triggers broad enough that the aggregate actually runs.
+- Preserve first-failure evidence and test inventory. Fix race conditions, nondeterminism, state leaks and network assumptions instead of retrying them.
+- Pin actions and toolchains per repo policy. Use ephemeral, least-privilege runners. Trusted jobs never restore caches written by untrusted jobs.
+- Bind evidence to exact repo, SHA, event, workflow, attempt, config and artifact. A previous green, cached test result, mutable branch name or changed artifact cannot certify the current candidate.
+- Treat helpers as scoped evidence tools. Legacy evaluator support for rolling policies does not authorize rolling main under this contract. A report-generation exit code is not merge eligibility.
 
 ## Resources
 
-- [Discovery matrix](references/01-discovery-matrix.md) — stack → modules, CI-provider adapters, workflow risk flags.
-- [Seven-module playbook](references/02-optimization-playbook.md) — experiments, counterexamples, gates, verified tool facts.
-- [Security and correctness](references/03-security-correctness.md) — trust zones, skipped-check semantics, failure testing, pre-publish review.
-- [Measurement and benchmarking](references/04-measurement-benchmarking.md) — metric definitions, two-axis sizing, evidence tiers, experiments, CI-side verification, rollback, raw schema.
-- [Worked examples](references/05-worked-examples.md) — monorepo, small library, polyglot, agent-heavy repo.
-- [Official sources](references/06-official-sources.md) — dated URLs, plus claims not yet confirmed.
-- [Config recipes](references/07-config-recipes.md) — aggregate check, caches, blobless clone, Oxlint, typecheck, Vitest projects, hooks.
-- [Validation architecture](references/08-validation-architecture.md) — four categories, evidence-driven design, PR budget, merge queue vs rolling main, release eligibility and rollout gates.
-- [Platform semantics](references/09-platform-updates.md) — parallel steps, cache capabilities, lockfiles, queues, approval, retention and runners.
-- [Stack adapters](references/10-stack-adapters.md) — Go, Next.js, Vitest, typed lint, formatting, Docker, Playwright, remote caches and artifacts.
-- [Evidence formats](references/11-evidence-formats.md) — snapshot, DAG, benchmark and four-category evaluator contracts; [feature matrix](references/feature-matrix.json) records support and verification scope.
-- [Agent brief](templates/agent-prompt.md) — paste-ready prompt for agents without this skill.
+- [Strict performance contract](references/14-two-minute-ci.md) — budgets, migration order, queue/caching, enforcement, negative controls and cost.
+- [Toolchain migration](references/15-toolchain-migration.md) — current supported commands, parity traps, cleanup and sources.
+- [Discovery matrix](references/01-discovery-matrix.md), [optimization playbook](references/02-optimization-playbook.md), [security](references/03-security-correctness.md).
+- [Measurement](references/04-measurement-benchmarking.md), [examples](references/05-worked-examples.md), [dated sources](references/06-official-sources.md), [recipes](references/07-config-recipes.md).
+- [Validation architecture](references/08-validation-architecture.md), [platform semantics](references/09-platform-updates.md), [stack adapters](references/10-stack-adapters.md).
+- [Evidence formats](references/11-evidence-formats.md), [field guide](references/12-field-guide.md), [measured adapters](references/13-measured-adapters.md), [feature matrix](references/feature-matrix.json).
 
 Self-test: `python3 -m unittest discover -s tests -v` from this skill's directory.

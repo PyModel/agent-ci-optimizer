@@ -22,7 +22,7 @@ approval. Trust those boundaries only after independent verification.
 
 ```sh
 python3 scripts/collect_gh.py --repo OWNER/REPO --out .ci-audit \
-  --limit 150 --event pull_request --target-branch main \
+  --limit 150 --include-incomplete --retries 0 --event pull_request --target-branch main \
   --created 2026-11-01..2026-11-17 --include-incomplete --incremental
 ```
 
@@ -48,7 +48,7 @@ detects modification relative to the manifest, not a maliciously replaced manife
 The provider reads are not a transaction; an attempt changing during collection is
 flagged. Preserve previous snapshots for comparisons under the retention policy.
 
-Requests are GET-only, serial, timed and bounded in retry/wait. `--incremental`
+Requests are GET-only, serial and timed. Use --retries 0 for the strict contract; bounded GET retry/wait support is legacy opt-in capability, not a check-retry policy. `--incremental`
 revalidates cached responses with the authenticated server; it does not reinterpret
 failed requests as fresh evidence. Raw provider errors are sanitized. Exit 3 means
 partial evidence; inspect the reason. Narrow an API-limited query and recollect.
@@ -153,13 +153,20 @@ Never invent a lockfile from regex hits. See [platform semantics](09-platform-up
 
 ## Four-category policy
 
+`evaluate_validation.py` evaluates supplied legacy policy assertions. It does not
+verify provider queue configuration/admission, merge_group execution, full test
+inventory or fresh test execution. Its scalar feedback threshold accepts equality
+and has no p50 test, so it does not certify the strict p50 <120 s / p95 <180 s
+contract. A result called pass is limited to those assertions; use explicit stage
+budgets and separately reviewed provider/percentile evidence for the strict policy.
+
 Copy [validation-policy.example.json](../templates/validation-policy.example.json)
 and have the repository owner review its expectations. It defines:
 
 - Repository identity, PR feedback budget, minimum PR sample and maximum evidence age.
 - All four categories, each with explicit qualified required-check identities.
-- Optional per-check `allowed_skip_reasons`; a skip still needs verified selection.
-- Integration mode (`merge_queue`, `rolling` or `all_pr`), maximum green age,
+- Legacy per-check `allowed_skip_reasons` apply only to proven PR selection; no full queue obligation may be omitted.
+- Integration mode (`merge_queue`; `rolling` and `all_pr` are historical compatibility only), maximum green age,
   maximum active-run age and maximum unverified-commit lag.
 - Explicit rollout enablement. If enabled: increasing percentages ending at 100,
   minimum samples/window, freshness and absolute/relative metric thresholds.
@@ -209,6 +216,8 @@ pauses promotion; an observed threshold breach aborts. A numeric pass does not
 authorize deployment or replace feature-flag, migration and operational checks.
 
 ## Result consumption
+
+Apply only the legacy assertion boundaries above; this command does not certify the strict CI SLO or queue admission.
 
 ```sh
 python3 scripts/evaluate_validation.py \
