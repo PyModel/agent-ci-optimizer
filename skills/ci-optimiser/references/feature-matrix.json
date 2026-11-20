@@ -1,9 +1,9 @@
 {
   "schema": "ci-feature-matrix/1",
-  "reviewed_on": "2026-11-17",
+  "reviewed_on": "2026-11-20",
   "review_timezone": "America/New_York",
   "source_register": "references/06-official-sources.md",
-  "purpose": "Dated support and verification inventory for repository capabilities and all 36 research recommendations.",
+  "purpose": "Dated local capability inventory and all 36 research recommendations. Per-feature dates preserve earlier source reviews; an inventory refresh does not reverify every external version.",
   "status_definitions": {
     "implemented": "Repository helper or contract is implemented and locally fixture-tested within its stated input scope.",
     "implemented_with_limits": "Concrete implementation is present; listed ingestion, automation or target-verification limits remain.",
@@ -43,7 +43,23 @@
       "tests/test_adapter_discovery.py",
       "tests/test_report_transport.py",
       "tests/test_workflow_semantics.py",
-      "tests/test_feature_matrix.py"
+      "tests/test_feature_matrix.py",
+      "tests/test_behavior_results.py",
+      "tests/test_cache_evidence.py",
+      "tests/test_capacity_model.py",
+      "tests/test_collect_gitlab.py",
+      "tests/test_gh_cache_inventory.py",
+      "tests/test_github_evidence_adapter.py",
+      "tests/test_job_budgets.py",
+      "tests/test_job_phase_metrics.py",
+      "tests/test_pre_push.py",
+      "tests/test_run_budget.py",
+      "tests/test_selector_negative_control.py",
+      "tests/test_shadow_contract.py",
+      "tests/test_shard_cache_contract.py",
+      "tests/test_timings_audit.py",
+      "tests/test_verify_gh_attestation.py",
+      "tests/test_benchmark_preparation.py"
     ]
   },
   "features": [
@@ -79,7 +95,8 @@
       ],
       "documentation_paths": [
         "references/04-measurement-benchmarking.md",
-        "references/11-evidence-formats.md"
+        "references/11-evidence-formats.md",
+        "references/helper-registry.md"
       ],
       "test_paths": [
         "tests/test_collection_contract.py"
@@ -98,12 +115,13 @@
       "domain": "repository",
       "title": "Consistent cohorts, attempts, usage and conditional price estimates",
       "status": "implemented",
-      "reviewed_on": "2026-11-17",
+      "reviewed_on": "2026-11-20",
       "version_scope": {
         "reviewed": [
           "ci-metrics/2",
           "ci-pricing/1",
-          "ci-cohort-context/1"
+          "ci-cohort-context/1",
+          "ci-phase-map/1"
         ],
         "target": "Python >=3.10; local fixture execution on Python 3.12.14/Linux"
       },
@@ -111,7 +129,8 @@
         "Python standard library only",
         "Manifest-listed payloads only; legacy raw data is explicitly unverified",
         "Diagnostic run timing is not authoritative required-check or release certification",
-        "Dated prices, runner classes, cohort context and inclusion rules must be supplied; output is not a provider invoice"
+        "Dated prices, runner classes, cohort context and inclusion rules must be supplied; output is not a provider invoice",
+        "Reviewed phase maps bind workflow, revision, job and attempt; name heuristics remain preliminary and mismatches remain unknown. Supplied bindings are not authenticated or budget certificates."
       ],
       "verification": {
         "kind": "python_fixtures",
@@ -119,14 +138,17 @@
         "downstream_runtime_compatibility": "unverified"
       },
       "implementation_paths": [
-        "scripts/analyze_gh.py"
+        "scripts/analyze_gh.py",
+        "scripts/phase_map.py"
       ],
       "documentation_paths": [
         "references/04-measurement-benchmarking.md",
-        "references/11-evidence-formats.md"
+        "references/11-evidence-formats.md",
+        "references/helper-registry.md"
       ],
       "test_paths": [
-        "tests/test_analysis_contract.py"
+        "tests/test_analysis_contract.py",
+        "tests/test_job_phase_metrics.py"
       ],
       "source_urls": [
         "https://docs.github.com/en/rest/actions/workflow-runs",
@@ -164,7 +186,9 @@
       ],
       "documentation_paths": [
         "references/04-measurement-benchmarking.md",
-        "references/11-evidence-formats.md"
+        "references/11-evidence-formats.md",
+        "references/capacity-model.md",
+        "references/helper-registry.md"
       ],
       "test_paths": [
         "tests/test_analysis_contract.py"
@@ -179,10 +203,12 @@
       "domain": "repository",
       "title": "Process cleanup, paired trials, provenance and statistical evidence",
       "status": "implemented",
-      "reviewed_on": "2026-11-17",
+      "reviewed_on": "2026-11-20",
       "version_scope": {
         "reviewed": [
-          "ci-benchmark/2"
+          "ci-benchmark/2",
+          "ci-benchmark-preparation/1",
+          "ci-benchmark-state/1"
         ],
         "target": "Python >=3.10; local fixture execution on Python 3.12.14/Linux"
       },
@@ -191,7 +217,8 @@
         "POSIX process-group cleanup; unsupported Windows execution fails before starting a command",
         "Local process management is not a security sandbox",
         "Comparisons require supplied workload/toolchain/cache/runner context and verified source fingerprints",
-        "Statistical eligibility never authorizes automatic adoption"
+        "Statistical eligibility never authorizes automatic adoption",
+        "Optional exact-argv preparation runs before every warmup and sample; a fresh bounded state report binds trial identity and typed cache evidence. Failed preparation, unresolved state and missing work remain visible; preparation cost stays separate from command timing."
       ],
       "verification": {
         "kind": "python_fixtures",
@@ -199,14 +226,18 @@
         "downstream_runtime_compatibility": "unverified"
       },
       "implementation_paths": [
-        "scripts/benchmark.py"
+        "scripts/benchmark.py",
+        "scripts/benchmark_preparation.py",
+        "scripts/cache_evidence.py"
       ],
       "documentation_paths": [
         "references/04-measurement-benchmarking.md",
-        "references/11-evidence-formats.md"
+        "references/11-evidence-formats.md",
+        "references/helper-registry.md"
       ],
       "test_paths": [
-        "tests/test_benchmark_contract.py"
+        "tests/test_benchmark_contract.py",
+        "tests/test_benchmark_preparation.py"
       ],
       "source_urls": [
         "https://docs.python.org/3/library/subprocess.html",
@@ -244,7 +275,8 @@
       ],
       "documentation_paths": [
         "references/08-validation-architecture.md",
-        "references/11-evidence-formats.md"
+        "references/11-evidence-formats.md",
+        "references/helper-registry.md"
       ],
       "test_paths": [
         "tests/test_validation_evidence.py"
@@ -285,7 +317,8 @@
       ],
       "documentation_paths": [
         "references/03-security-correctness.md",
-        "references/07-config-recipes.md"
+        "references/07-config-recipes.md",
+        "references/helper-registry.md"
       ],
       "test_paths": [
         "tests/test_selector_contract.py"
@@ -328,7 +361,8 @@
       "documentation_paths": [
         "references/01-discovery-matrix.md",
         "references/08-validation-architecture.md",
-        "references/10-stack-adapters.md"
+        "references/10-stack-adapters.md",
+        "references/helper-registry.md"
       ],
       "test_paths": [
         "tests/test_discovery_contract.py",
@@ -368,7 +402,8 @@
       ],
       "documentation_paths": [
         "references/07-config-recipes.md",
-        "references/10-stack-adapters.md"
+        "references/10-stack-adapters.md",
+        "references/helper-registry.md"
       ],
       "test_paths": [
         "tests/test_report_transport.py"
@@ -410,7 +445,8 @@
       ],
       "documentation_paths": [
         "references/09-platform-updates.md",
-        "references/11-evidence-formats.md"
+        "references/11-evidence-formats.md",
+        "references/helper-registry.md"
       ],
       "test_paths": [
         "tests/test_workflow_semantics.py"
@@ -1331,7 +1367,7 @@
       "domain": "repository",
       "title": "Dated compatibility register and recommendation traceability",
       "status": "implemented",
-      "reviewed_on": "2026-11-17",
+      "reviewed_on": "2026-11-20",
       "version_scope": {
         "reviewed": [
           "ci-feature-matrix/1"
@@ -1341,7 +1377,8 @@
       "support_constraints": [
         "Python standard library only",
         "All 36 research recommendations must map to concrete repository evidence",
-        "Source review and local Python fixtures never establish downstream runtime compatibility"
+        "Source review and local Python fixtures never establish downstream runtime compatibility",
+        "Every Python helper has an explicit public/internal classification, interface and capability mapping; static traceability does not prove semantic test coverage."
       ],
       "verification": {
         "kind": "python_fixtures",
@@ -1354,7 +1391,8 @@
       "documentation_paths": [
         "references/06-official-sources.md",
         "references/09-platform-updates.md",
-        "references/10-stack-adapters.md"
+        "references/10-stack-adapters.md",
+        "references/helper-registry.md"
       ],
       "test_paths": [
         "tests/test_feature_matrix.py"
@@ -1363,6 +1401,490 @@
         "https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax",
         "https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/",
         "https://bun.com/docs/runtime/check"
+      ]
+    },
+    {
+      "id": "cache_economics",
+      "domain": "repository",
+      "title": "Layered cache economics and retained negative observations",
+      "status": "implemented",
+      "reviewed_on": "2026-11-20",
+      "version_scope": {
+        "reviewed": [
+          "ci-cache-events/1",
+          "ci-cache-events/2",
+          "ci-cache-analysis/2"
+        ],
+        "target": "Python >=3.10; local fixture execution on Python 3.12.14/Linux"
+      },
+      "support_constraints": [
+        "Python standard library only",
+        "Supplied layer identities, comparison review and timing boundaries are validated structurally, never authenticated.",
+        "Mixed incomplete evidence retains known negative observations; no cache hit establishes savings, critical-path improvement or fresh test execution."
+      ],
+      "verification": {
+        "kind": "python_fixtures",
+        "runtime_execution": "local_passed",
+        "downstream_runtime_compatibility": "unverified"
+      },
+      "implementation_paths": [
+        "scripts/analyze_cache.py",
+        "scripts/cache_evidence.py"
+      ],
+      "documentation_paths": [
+        "references/13-measured-adapters.md",
+        "references/helper-registry.md"
+      ],
+      "test_paths": [
+        "tests/test_shard_cache_contract.py",
+        "tests/test_cache_evidence.py"
+      ],
+      "source_urls": [
+        "https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching"
+      ]
+    },
+    {
+      "id": "cache_inventory",
+      "domain": "repository",
+      "title": "Bounded GitHub cache inventory",
+      "status": "implemented",
+      "reviewed_on": "2026-11-20",
+      "version_scope": {
+        "reviewed": [
+          "ci-github-cache-inventory/1"
+        ],
+        "target": "Python >=3.10; local fixture execution on Python 3.12.14/Linux"
+      },
+      "support_constraints": [
+        "Python standard library only",
+        "GET-only authenticated gh collection; live credentials and provider availability remain unverified.",
+        "Inventory metadata cannot establish per-job hits, restore cost, saved work or eviction cause; incomplete collection stays explicit."
+      ],
+      "verification": {
+        "kind": "python_fixtures",
+        "runtime_execution": "local_passed",
+        "downstream_runtime_compatibility": "unverified"
+      },
+      "implementation_paths": [
+        "scripts/collect_gh_cache.py"
+      ],
+      "documentation_paths": [
+        "references/13-measured-adapters.md",
+        "references/helper-registry.md"
+      ],
+      "test_paths": [
+        "tests/test_gh_cache_inventory.py"
+      ],
+      "source_urls": [
+        "https://docs.github.com/en/rest/actions/cache"
+      ]
+    },
+    {
+      "id": "check_evidence",
+      "domain": "repository",
+      "title": "Exact-revision GitHub check evidence",
+      "status": "implemented",
+      "reviewed_on": "2026-11-20",
+      "version_scope": {
+        "reviewed": [
+          "ci-github-expectations/1",
+          "ci-github-check-evidence/1"
+        ],
+        "target": "Python >=3.10; local fixture execution on Python 3.12.14/Linux"
+      },
+      "support_constraints": [
+        "Python standard library only",
+        "Caller supplies reviewed expected identities; read-only collection observes provider results at one time.",
+        "No assertion of historical policy, build-input authenticity, full integration or release eligibility."
+      ],
+      "verification": {
+        "kind": "python_fixtures",
+        "runtime_execution": "local_passed",
+        "downstream_runtime_compatibility": "unverified"
+      },
+      "implementation_paths": [
+        "scripts/collect_gh_evidence.py"
+      ],
+      "documentation_paths": [
+        "references/13-measured-adapters.md",
+        "references/helper-registry.md"
+      ],
+      "test_paths": [
+        "tests/test_github_evidence_adapter.py"
+      ],
+      "source_urls": [
+        "https://docs.github.com/en/rest/actions/workflow-jobs",
+        "https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/troubleshooting-required-status-checks"
+      ]
+    },
+    {
+      "id": "gitlab_collector",
+      "domain": "repository",
+      "title": "Read-only GitLab pipeline and job snapshots",
+      "status": "implemented",
+      "reviewed_on": "2026-11-20",
+      "version_scope": {
+        "reviewed": [
+          "ci-gitlab-pipeline-snapshot/1"
+        ],
+        "target": "Python >=3.10; local fixture execution on Python 3.12.14/Linux"
+      },
+      "support_constraints": [
+        "Python standard library only",
+        "Requires an operator-trusted HTTPS instance and scoped credentials when needed; live provider behavior is unverified.",
+        "Native queue values, retried jobs and downstream identities are retained; snapshot consistency, admission eligibility and queue causes are not established."
+      ],
+      "verification": {
+        "kind": "python_fixtures",
+        "runtime_execution": "local_passed",
+        "downstream_runtime_compatibility": "unverified"
+      },
+      "implementation_paths": [
+        "scripts/collect_gitlab.py"
+      ],
+      "documentation_paths": [
+        "references/13-measured-adapters.md",
+        "references/helper-registry.md"
+      ],
+      "test_paths": [
+        "tests/test_collect_gitlab.py"
+      ],
+      "source_urls": [
+        "https://docs.gitlab.com/api/jobs/"
+      ]
+    },
+    {
+      "id": "shadow_evaluator",
+      "domain": "repository",
+      "title": "Selected-versus-FULL shadow evidence",
+      "status": "implemented",
+      "reviewed_on": "2026-11-20",
+      "version_scope": {
+        "reviewed": [
+          "ci-selector-shadow/1"
+        ],
+        "target": "Python >=3.10; local fixture execution on Python 3.12.14/Linux"
+      },
+      "support_constraints": [
+        "Python standard library only",
+        "Needs complete exact-revision inventories and comparable context; preserves missing, skipped and failed observations.",
+        "One clean comparison cannot authorize removing full validation or prove all dependency reachability."
+      ],
+      "verification": {
+        "kind": "python_fixtures",
+        "runtime_execution": "local_passed",
+        "downstream_runtime_compatibility": "unverified"
+      },
+      "implementation_paths": [
+        "scripts/evaluate_shadow.py"
+      ],
+      "documentation_paths": [
+        "references/13-measured-adapters.md",
+        "references/14-two-minute-ci.md",
+        "references/helper-registry.md"
+      ],
+      "test_paths": [
+        "tests/test_shadow_contract.py",
+        "tests/test_selector_negative_control.py"
+      ],
+      "source_urls": [
+        "https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/troubleshooting-required-status-checks"
+      ]
+    },
+    {
+      "id": "shard_planner",
+      "domain": "repository",
+      "title": "Inventory-preserving duration-based shard plans",
+      "status": "implemented",
+      "reviewed_on": "2026-11-20",
+      "version_scope": {
+        "reviewed": [
+          "ci-test-inventory/1",
+          "ci-test-timings/1"
+        ],
+        "target": "Python >=3.10; local fixture execution on Python 3.12.14/Linux"
+      },
+      "support_constraints": [
+        "Python standard library only",
+        "Normalized IDs, measured durations, serial groups and coverage declarations are supplied input.",
+        "No JUnit ingestion, test execution, runner dispatch or coverage certification; estimates with unknown durations remain conditional."
+      ],
+      "verification": {
+        "kind": "python_fixtures",
+        "runtime_execution": "local_passed",
+        "downstream_runtime_compatibility": "unverified"
+      },
+      "implementation_paths": [
+        "scripts/plan_shards.py"
+      ],
+      "documentation_paths": [
+        "references/13-measured-adapters.md",
+        "references/helper-registry.md"
+      ],
+      "test_paths": [
+        "tests/test_shard_cache_contract.py"
+      ],
+      "source_urls": [
+        "https://playwright.dev/docs/test-sharding"
+      ]
+    },
+    {
+      "id": "capacity_model",
+      "domain": "repository",
+      "title": "Finite-capacity scheduling and explicit-rate estimates",
+      "status": "implemented",
+      "reviewed_on": "2026-11-20",
+      "version_scope": {
+        "reviewed": [
+          "ci-capacity-model/1"
+        ],
+        "target": "Python >=3.10; local fixture execution on Python 3.12.14/Linux"
+      },
+      "support_constraints": [
+        "Python standard library only",
+        "Deterministic list scheduling with supplied finite pools and locks; no optimality or real queue prediction.",
+        "Optional supplied prices are assumptions, not current rates or invoices; missing or mixed-currency totals stay unknown."
+      ],
+      "verification": {
+        "kind": "python_fixtures",
+        "runtime_execution": "local_passed",
+        "downstream_runtime_compatibility": "unverified"
+      },
+      "implementation_paths": [
+        "scripts/capacity_model.py"
+      ],
+      "documentation_paths": [
+        "references/capacity-model.md",
+        "references/helper-registry.md"
+      ],
+      "test_paths": [
+        "tests/test_capacity_model.py"
+      ],
+      "source_urls": [
+        "https://docs.github.com/en/actions/reference/runners/self-hosted-runners"
+      ]
+    },
+    {
+      "id": "attestation_verifier",
+      "domain": "repository",
+      "title": "Pinned GitHub CLI artifact provenance verification",
+      "status": "implemented",
+      "reviewed_on": "2026-11-20",
+      "version_scope": {
+        "reviewed": [
+          "ci-github-attestation/1"
+        ],
+        "target": "Python >=3.10; local fixture execution on Python 3.12.14/Linux"
+      },
+      "support_constraints": [
+        "Python standard library only",
+        "Requires local bytes, a reviewed pinned CLI and exact source/signer identities in a trusted POSIX environment.",
+        "Fixture execution does not verify live signature-service availability; provenance is not test success or deployment authorization."
+      ],
+      "verification": {
+        "kind": "python_fixtures",
+        "runtime_execution": "local_passed",
+        "downstream_runtime_compatibility": "unverified"
+      },
+      "implementation_paths": [
+        "scripts/verify_gh_attestation.py"
+      ],
+      "documentation_paths": [
+        "references/13-measured-adapters.md",
+        "references/helper-registry.md"
+      ],
+      "test_paths": [
+        "tests/test_verify_gh_attestation.py"
+      ],
+      "source_urls": [
+        "https://cli.github.com/manual/gh_attestation_verify"
+      ]
+    },
+    {
+      "id": "command_budget",
+      "domain": "repository",
+      "title": "Monotonic command budgets with preserved failures",
+      "status": "implemented",
+      "reviewed_on": "2026-11-20",
+      "version_scope": {
+        "reviewed": [
+          "run_budget.py argv and optional evidence JSON contract"
+        ],
+        "target": "Python >=3.10; local fixture execution on Python 3.12.14/Linux"
+      },
+      "support_constraints": [
+        "Python standard library only",
+        "Runs one argv without a shell or retries and requires success strictly below the elapsed budget.",
+        "POSIX process groups have bounded cleanup; Windows fallback controls only the direct child. Not a queue/setup or percentile verifier."
+      ],
+      "verification": {
+        "kind": "python_fixtures",
+        "runtime_execution": "local_passed",
+        "downstream_runtime_compatibility": "unverified"
+      },
+      "implementation_paths": [
+        "scripts/run_budget.py"
+      ],
+      "documentation_paths": [
+        "references/13-measured-adapters.md",
+        "references/14-two-minute-ci.md",
+        "references/helper-registry.md"
+      ],
+      "test_paths": [
+        "tests/test_run_budget.py"
+      ],
+      "source_urls": [
+        "https://docs.python.org/3/library/subprocess.html"
+      ]
+    },
+    {
+      "id": "job_budget",
+      "domain": "repository",
+      "title": "Exact job and step budget evidence",
+      "status": "implemented",
+      "reviewed_on": "2026-11-20",
+      "version_scope": {
+        "reviewed": [
+          "ci-job-budgets/1",
+          "ci-current-job-setup/1"
+        ],
+        "target": "Python >=3.10; local fixture execution on Python 3.12.14/Linux"
+      },
+      "support_constraints": [
+        "Python standard library only",
+        "Offline evidence must match reviewed exact job/step policy, run, SHA and first attempt; supplied evidence is not authenticated.",
+        "The current verifier job may retain pending work/runner completion; this is not a completed workflow certificate."
+      ],
+      "verification": {
+        "kind": "python_fixtures",
+        "runtime_execution": "local_passed",
+        "downstream_runtime_compatibility": "unverified"
+      },
+      "implementation_paths": [
+        "scripts/check_job_budgets.py"
+      ],
+      "documentation_paths": [
+        "references/11-evidence-formats.md",
+        "references/13-measured-adapters.md",
+        "references/helper-registry.md"
+      ],
+      "test_paths": [
+        "tests/test_job_budgets.py",
+        "tests/test_job_phase_metrics.py"
+      ],
+      "source_urls": [
+        "https://docs.github.com/en/rest/actions/workflow-jobs"
+      ]
+    },
+    {
+      "id": "local_hook",
+      "domain": "repository",
+      "title": "Preservation-aware pre-push checks",
+      "status": "implemented",
+      "reviewed_on": "2026-11-20",
+      "version_scope": {
+        "reviewed": [
+          "Git pre-push stdin and clean-current-HEAD contract"
+        ],
+        "target": "Python >=3.10; local fixture execution on Python 3.12.14/Linux"
+      },
+      "support_constraints": [
+        "Python standard library only",
+        "Repository-specific local hook checks committed whitespace, changed Python syntax, package contracts and actionlint under the command budget.",
+        "Syntax compilation is not static typechecking; no configured Python formatter/typechecker is claimed. No fetch, install, rewrite or check retry."
+      ],
+      "verification": {
+        "kind": "python_fixtures",
+        "runtime_execution": "local_passed",
+        "downstream_runtime_compatibility": "unverified"
+      },
+      "implementation_paths": [
+        "scripts/pre_push.py"
+      ],
+      "documentation_paths": [
+        "references/helper-registry.md"
+      ],
+      "test_paths": [
+        "tests/test_pre_push.py"
+      ],
+      "source_urls": [
+        "https://docs.python.org/3/library/subprocess.html"
+      ]
+    },
+    {
+      "id": "timing_report",
+      "domain": "repository",
+      "title": "Bounded diagnostic timing report publication",
+      "status": "implemented",
+      "reviewed_on": "2026-11-20",
+      "version_scope": {
+        "reviewed": [
+          "ci-metrics/2",
+          "ci-timing-audit/1"
+        ],
+        "target": "Python >=3.10; local fixture execution on Python 3.12.14/Linux"
+      },
+      "support_constraints": [
+        "Python standard library only",
+        "Reports per-field support, outcome/attempt composition and explicit phase classification; incomplete percentiles are labelled.",
+        "Writes bounded local report artifacts, not provider configuration. Protection, merge/release eligibility, live rates and production improvements remain unassessed."
+      ],
+      "verification": {
+        "kind": "python_fixtures",
+        "runtime_execution": "local_passed",
+        "downstream_runtime_compatibility": "unverified"
+      },
+      "implementation_paths": [
+        "scripts/report_gh_timings.py"
+      ],
+      "documentation_paths": [
+        "references/helper-registry.md",
+        "references/11-evidence-formats.md"
+      ],
+      "test_paths": [
+        "tests/test_timings_audit.py"
+      ],
+      "source_urls": [
+        "https://docs.github.com/en/rest/actions/workflow-jobs"
+      ]
+    },
+    {
+      "id": "behavior_results",
+      "domain": "repository",
+      "title": "Offline agent-comparison evidence ledger",
+      "status": "implemented",
+      "reviewed_on": "2026-11-20",
+      "version_scope": {
+        "reviewed": [
+          "ci-behavior-cases/1",
+          "ci-behavior-rubric/1",
+          "ci-behavior-results/1"
+        ],
+        "target": "Python >=3.10; local fixture execution on Python 3.12.14/Linux"
+      },
+      "support_constraints": [
+        "Python standard library only",
+        "Checks frozen case/rubric identities, declared matched settings, balanced order, raw bytes, evidence quotes and complete planned trial inventory.",
+        "Preserves failed and blocked outcomes; never executes or semantically grades agents, authenticates provenance or establishes model robustness."
+      ],
+      "verification": {
+        "kind": "python_fixtures",
+        "runtime_execution": "local_passed",
+        "downstream_runtime_compatibility": "unverified"
+      },
+      "implementation_paths": [
+        "scripts/check_behavior_results.py"
+      ],
+      "documentation_paths": [
+        "evals/README.md",
+        "evals/results-contract.md",
+        "references/helper-registry.md"
+      ],
+      "test_paths": [
+        "tests/test_behavior_results.py"
+      ],
+      "source_urls": [
+        "https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/troubleshooting-required-status-checks"
       ]
     }
   ],
@@ -1379,15 +1901,18 @@
       "remaining_target_validation": [],
       "implementation_paths": [
         "scripts/collect_gh.py",
-        "scripts/analyze_gh.py"
+        "scripts/analyze_gh.py",
+        "scripts/phase_map.py"
       ],
       "documentation_paths": [
         "references/04-measurement-benchmarking.md",
-        "references/11-evidence-formats.md"
+        "references/11-evidence-formats.md",
+        "references/helper-registry.md"
       ],
       "test_paths": [
         "tests/test_collection_contract.py",
-        "tests/test_analysis_contract.py"
+        "tests/test_analysis_contract.py",
+        "tests/test_job_phase_metrics.py"
       ],
       "source_urls": [
         "https://docs.github.com/en/rest/actions/workflow-runs",
@@ -1409,14 +1934,17 @@
       "implementation_scope": "Stable run chronology and event/branch/workflow identities prevent older successes from overriding newer failures.",
       "remaining_target_validation": [],
       "implementation_paths": [
-        "scripts/analyze_gh.py"
+        "scripts/analyze_gh.py",
+        "scripts/phase_map.py"
       ],
       "documentation_paths": [
         "references/04-measurement-benchmarking.md",
-        "references/11-evidence-formats.md"
+        "references/11-evidence-formats.md",
+        "references/helper-registry.md"
       ],
       "test_paths": [
-        "tests/test_analysis_contract.py"
+        "tests/test_analysis_contract.py",
+        "tests/test_job_phase_metrics.py"
       ],
       "source_urls": [
         "https://docs.github.com/en/rest/actions/workflow-runs",
@@ -1437,15 +1965,18 @@
       "remaining_target_validation": [],
       "implementation_paths": [
         "scripts/collect_gh.py",
-        "scripts/analyze_gh.py"
+        "scripts/analyze_gh.py",
+        "scripts/phase_map.py"
       ],
       "documentation_paths": [
         "references/04-measurement-benchmarking.md",
-        "references/11-evidence-formats.md"
+        "references/11-evidence-formats.md",
+        "references/helper-registry.md"
       ],
       "test_paths": [
         "tests/test_collection_contract.py",
-        "tests/test_analysis_contract.py"
+        "tests/test_analysis_contract.py",
+        "tests/test_job_phase_metrics.py"
       ],
       "source_urls": [
         "https://docs.github.com/en/rest/actions/workflow-runs",
@@ -1469,15 +2000,18 @@
       "remaining_target_validation": [],
       "implementation_paths": [
         "scripts/collect_gh.py",
-        "scripts/analyze_gh.py"
+        "scripts/analyze_gh.py",
+        "scripts/phase_map.py"
       ],
       "documentation_paths": [
         "references/04-measurement-benchmarking.md",
-        "references/11-evidence-formats.md"
+        "references/11-evidence-formats.md",
+        "references/helper-registry.md"
       ],
       "test_paths": [
         "tests/test_collection_contract.py",
-        "tests/test_analysis_contract.py"
+        "tests/test_analysis_contract.py",
+        "tests/test_job_phase_metrics.py"
       ],
       "source_urls": [
         "https://docs.github.com/en/rest/actions/workflow-runs",
@@ -1501,15 +2035,18 @@
       "remaining_target_validation": [],
       "implementation_paths": [
         "scripts/collect_gh.py",
-        "scripts/analyze_gh.py"
+        "scripts/analyze_gh.py",
+        "scripts/phase_map.py"
       ],
       "documentation_paths": [
         "references/04-measurement-benchmarking.md",
-        "references/11-evidence-formats.md"
+        "references/11-evidence-formats.md",
+        "references/helper-registry.md"
       ],
       "test_paths": [
         "tests/test_collection_contract.py",
-        "tests/test_analysis_contract.py"
+        "tests/test_analysis_contract.py",
+        "tests/test_job_phase_metrics.py"
       ],
       "source_urls": [
         "https://docs.github.com/en/rest/actions/workflow-runs",
@@ -1538,7 +2075,9 @@
       ],
       "documentation_paths": [
         "references/04-measurement-benchmarking.md",
-        "references/11-evidence-formats.md"
+        "references/11-evidence-formats.md",
+        "references/capacity-model.md",
+        "references/helper-registry.md"
       ],
       "test_paths": [
         "tests/test_analysis_contract.py"
@@ -1558,14 +2097,18 @@
       "implementation_scope": "POSIX group cleanup and negative process fixtures stop later trials when cleanup is incomplete.",
       "remaining_target_validation": [],
       "implementation_paths": [
-        "scripts/benchmark.py"
+        "scripts/benchmark.py",
+        "scripts/benchmark_preparation.py",
+        "scripts/cache_evidence.py"
       ],
       "documentation_paths": [
         "references/04-measurement-benchmarking.md",
-        "references/11-evidence-formats.md"
+        "references/11-evidence-formats.md",
+        "references/helper-registry.md"
       ],
       "test_paths": [
-        "tests/test_benchmark_contract.py"
+        "tests/test_benchmark_contract.py",
+        "tests/test_benchmark_preparation.py"
       ],
       "source_urls": [
         "https://docs.python.org/3/library/subprocess.html",
@@ -1582,14 +2125,18 @@
       "implementation_scope": "Warmups are recorded with status and cleanup evidence; failures stop trials unless explicitly allowed.",
       "remaining_target_validation": [],
       "implementation_paths": [
-        "scripts/benchmark.py"
+        "scripts/benchmark.py",
+        "scripts/benchmark_preparation.py",
+        "scripts/cache_evidence.py"
       ],
       "documentation_paths": [
         "references/04-measurement-benchmarking.md",
-        "references/11-evidence-formats.md"
+        "references/11-evidence-formats.md",
+        "references/helper-registry.md"
       ],
       "test_paths": [
-        "tests/test_benchmark_contract.py"
+        "tests/test_benchmark_contract.py",
+        "tests/test_benchmark_preparation.py"
       ],
       "source_urls": [
         "https://docs.python.org/3/library/subprocess.html",
@@ -1606,14 +2153,18 @@
       "implementation_scope": "Source, dirty-content fingerprint and metadata snapshots precede warmup and are rechecked after execution.",
       "remaining_target_validation": [],
       "implementation_paths": [
-        "scripts/benchmark.py"
+        "scripts/benchmark.py",
+        "scripts/benchmark_preparation.py",
+        "scripts/cache_evidence.py"
       ],
       "documentation_paths": [
         "references/04-measurement-benchmarking.md",
-        "references/11-evidence-formats.md"
+        "references/11-evidence-formats.md",
+        "references/helper-registry.md"
       ],
       "test_paths": [
-        "tests/test_benchmark_contract.py"
+        "tests/test_benchmark_contract.py",
+        "tests/test_benchmark_preparation.py"
       ],
       "source_urls": [
         "https://docs.python.org/3/library/subprocess.html",
@@ -1635,17 +2186,20 @@
       "implementation_paths": [
         "scripts/analyze_gh.py",
         "scripts/inspect_workflows.py",
-        "scripts/discover_repo.py"
+        "scripts/discover_repo.py",
+        "scripts/phase_map.py"
       ],
       "documentation_paths": [
         "references/04-measurement-benchmarking.md",
         "references/11-evidence-formats.md",
-        "references/09-platform-updates.md"
+        "references/09-platform-updates.md",
+        "references/helper-registry.md"
       ],
       "test_paths": [
         "tests/test_analysis_contract.py",
         "tests/test_workflow_semantics.py",
-        "tests/test_discovery_contract.py"
+        "tests/test_discovery_contract.py",
+        "tests/test_job_phase_metrics.py"
       ],
       "source_urls": [
         "https://docs.github.com/en/rest/actions/workflow-runs",
@@ -1675,7 +2229,8 @@
       "documentation_paths": [
         "references/04-measurement-benchmarking.md",
         "references/11-evidence-formats.md",
-        "references/09-platform-updates.md"
+        "references/09-platform-updates.md",
+        "references/helper-registry.md"
       ],
       "test_paths": [
         "tests/test_collection_contract.py",
@@ -1707,18 +2262,24 @@
       "implementation_paths": [
         "scripts/benchmark.py",
         "scripts/analyze_gh.py",
-        "scripts/check_reports.py"
+        "scripts/check_reports.py",
+        "scripts/phase_map.py",
+        "scripts/benchmark_preparation.py",
+        "scripts/cache_evidence.py"
       ],
       "documentation_paths": [
         "references/04-measurement-benchmarking.md",
         "references/11-evidence-formats.md",
         "references/07-config-recipes.md",
-        "references/10-stack-adapters.md"
+        "references/10-stack-adapters.md",
+        "references/helper-registry.md"
       ],
       "test_paths": [
         "tests/test_benchmark_contract.py",
         "tests/test_analysis_contract.py",
-        "tests/test_report_transport.py"
+        "tests/test_report_transport.py",
+        "tests/test_job_phase_metrics.py",
+        "tests/test_benchmark_preparation.py"
       ],
       "source_urls": [
         "https://docs.python.org/3/library/subprocess.html",
@@ -1748,16 +2309,20 @@
       "implementation_paths": [
         "scripts/analyze_gh.py",
         "scripts/evaluate_validation.py",
-        "scripts/graph_metrics.py"
+        "scripts/graph_metrics.py",
+        "scripts/phase_map.py"
       ],
       "documentation_paths": [
         "references/04-measurement-benchmarking.md",
         "references/11-evidence-formats.md",
-        "references/08-validation-architecture.md"
+        "references/08-validation-architecture.md",
+        "references/capacity-model.md",
+        "references/helper-registry.md"
       ],
       "test_paths": [
         "tests/test_analysis_contract.py",
-        "tests/test_validation_evidence.py"
+        "tests/test_validation_evidence.py",
+        "tests/test_job_phase_metrics.py"
       ],
       "source_urls": [
         "https://docs.github.com/en/rest/actions/workflow-runs",
@@ -1784,16 +2349,19 @@
       "remaining_target_validation": [],
       "implementation_paths": [
         "scripts/analyze_gh.py",
-        "scripts/evaluate_validation.py"
+        "scripts/evaluate_validation.py",
+        "scripts/phase_map.py"
       ],
       "documentation_paths": [
         "references/04-measurement-benchmarking.md",
         "references/11-evidence-formats.md",
-        "references/08-validation-architecture.md"
+        "references/08-validation-architecture.md",
+        "references/helper-registry.md"
       ],
       "test_paths": [
         "tests/test_analysis_contract.py",
-        "tests/test_validation_evidence.py"
+        "tests/test_validation_evidence.py",
+        "tests/test_job_phase_metrics.py"
       ],
       "source_urls": [
         "https://docs.github.com/en/rest/actions/workflow-runs",
@@ -1955,7 +2523,8 @@
       "documentation_paths": [
         "references/09-platform-updates.md",
         "references/04-measurement-benchmarking.md",
-        "references/11-evidence-formats.md"
+        "references/11-evidence-formats.md",
+        "references/helper-registry.md"
       ],
       "test_paths": [
         "tests/test_collection_contract.py",
@@ -2088,7 +2657,8 @@
       ],
       "documentation_paths": [
         "references/10-stack-adapters.md",
-        "references/07-config-recipes.md"
+        "references/07-config-recipes.md",
+        "references/helper-registry.md"
       ],
       "test_paths": [
         "tests/test_report_transport.py"
@@ -2116,7 +2686,8 @@
       "documentation_paths": [
         "references/10-stack-adapters.md",
         "references/01-discovery-matrix.md",
-        "references/08-validation-architecture.md"
+        "references/08-validation-architecture.md",
+        "references/helper-registry.md"
       ],
       "test_paths": [
         "tests/test_adapter_discovery.py",
@@ -2148,7 +2719,8 @@
         "references/10-stack-adapters.md",
         "references/07-config-recipes.md",
         "references/01-discovery-matrix.md",
-        "references/08-validation-architecture.md"
+        "references/08-validation-architecture.md",
+        "references/helper-registry.md"
       ],
       "test_paths": [
         "tests/test_adapter_discovery.py",
@@ -2178,7 +2750,8 @@
       "documentation_paths": [
         "references/10-stack-adapters.md",
         "references/01-discovery-matrix.md",
-        "references/08-validation-architecture.md"
+        "references/08-validation-architecture.md",
+        "references/helper-registry.md"
       ],
       "test_paths": [
         "tests/test_adapter_discovery.py",
@@ -2208,7 +2781,8 @@
       "documentation_paths": [
         "references/10-stack-adapters.md",
         "references/01-discovery-matrix.md",
-        "references/08-validation-architecture.md"
+        "references/08-validation-architecture.md",
+        "references/helper-registry.md"
       ],
       "test_paths": [
         "tests/test_adapter_discovery.py",
@@ -2237,7 +2811,8 @@
       "documentation_paths": [
         "references/10-stack-adapters.md",
         "references/01-discovery-matrix.md",
-        "references/08-validation-architecture.md"
+        "references/08-validation-architecture.md",
+        "references/helper-registry.md"
       ],
       "test_paths": [
         "tests/test_adapter_discovery.py",
@@ -2267,7 +2842,8 @@
       "documentation_paths": [
         "references/10-stack-adapters.md",
         "references/01-discovery-matrix.md",
-        "references/08-validation-architecture.md"
+        "references/08-validation-architecture.md",
+        "references/helper-registry.md"
       ],
       "test_paths": [
         "tests/test_adapter_discovery.py",
@@ -2297,7 +2873,8 @@
       "documentation_paths": [
         "references/10-stack-adapters.md",
         "references/01-discovery-matrix.md",
-        "references/08-validation-architecture.md"
+        "references/08-validation-architecture.md",
+        "references/helper-registry.md"
       ],
       "test_paths": [
         "tests/test_adapter_discovery.py",
@@ -2327,7 +2904,8 @@
       "documentation_paths": [
         "references/10-stack-adapters.md",
         "references/01-discovery-matrix.md",
-        "references/08-validation-architecture.md"
+        "references/08-validation-architecture.md",
+        "references/helper-registry.md"
       ],
       "test_paths": [
         "tests/test_adapter_discovery.py",
@@ -2361,7 +2939,8 @@
       "documentation_paths": [
         "references/06-official-sources.md",
         "references/09-platform-updates.md",
-        "references/10-stack-adapters.md"
+        "references/10-stack-adapters.md",
+        "references/helper-registry.md"
       ],
       "test_paths": [
         "tests/test_feature_matrix.py",
@@ -2390,7 +2969,8 @@
       ],
       "documentation_paths": [
         "references/10-stack-adapters.md",
-        "references/07-config-recipes.md"
+        "references/07-config-recipes.md",
+        "references/helper-registry.md"
       ],
       "test_paths": [
         "tests/test_report_transport.py"
@@ -2419,7 +2999,8 @@
       "documentation_paths": [
         "references/10-stack-adapters.md",
         "references/09-platform-updates.md",
-        "references/06-official-sources.md"
+        "references/06-official-sources.md",
+        "references/helper-registry.md"
       ],
       "test_paths": [
         "tests/test_skill_docs.py",
@@ -2436,5 +3017,228 @@
         "https://bun.com/docs/runtime/check"
       ]
     }
-  ]
+  ],
+  "helper_inventory": {
+    "schema": "ci-helper-inventory/1",
+    "reviewed_on": "2026-11-20",
+    "documentation": "references/helper-registry.md",
+    "helpers": [
+      {
+        "path": "scripts/analyze_cache.py",
+        "visibility": "public",
+        "interface": "cli",
+        "feature_ids": [
+          "cache_economics"
+        ]
+      },
+      {
+        "path": "scripts/analyze_gh.py",
+        "visibility": "public",
+        "interface": "cli",
+        "feature_ids": [
+          "analyzer",
+          "job_graph"
+        ]
+      },
+      {
+        "path": "scripts/benchmark.py",
+        "visibility": "public",
+        "interface": "cli",
+        "feature_ids": [
+          "benchmark"
+        ]
+      },
+      {
+        "path": "scripts/benchmark_preparation.py",
+        "visibility": "internal",
+        "interface": "library",
+        "feature_ids": [
+          "benchmark"
+        ],
+        "consumed_by": [
+          "scripts/benchmark.py"
+        ],
+        "reason": "Bounded exact-argv preparation and nonce-bound state protocol used by benchmark; not a supported command."
+      },
+      {
+        "path": "scripts/cache_evidence.py",
+        "visibility": "internal",
+        "interface": "library",
+        "feature_ids": [
+          "benchmark",
+          "cache_economics"
+        ],
+        "consumed_by": [
+          "scripts/analyze_cache.py",
+          "scripts/benchmark.py",
+          "scripts/benchmark_preparation.py"
+        ],
+        "reason": "Shared typed cache validation; not a supported command."
+      },
+      {
+        "path": "scripts/capacity_model.py",
+        "visibility": "public",
+        "interface": "cli",
+        "feature_ids": [
+          "capacity_model"
+        ]
+      },
+      {
+        "path": "scripts/check_behavior_results.py",
+        "visibility": "public",
+        "interface": "cli",
+        "feature_ids": [
+          "behavior_results"
+        ]
+      },
+      {
+        "path": "scripts/check_job_budgets.py",
+        "visibility": "public",
+        "interface": "cli",
+        "feature_ids": [
+          "job_budget"
+        ]
+      },
+      {
+        "path": "scripts/check_reports.py",
+        "visibility": "public",
+        "interface": "cli",
+        "feature_ids": [
+          "report_transport"
+        ]
+      },
+      {
+        "path": "scripts/collect_gh.py",
+        "visibility": "public",
+        "interface": "cli",
+        "feature_ids": [
+          "collector"
+        ]
+      },
+      {
+        "path": "scripts/collect_gh_cache.py",
+        "visibility": "public",
+        "interface": "cli",
+        "feature_ids": [
+          "cache_inventory"
+        ]
+      },
+      {
+        "path": "scripts/collect_gh_evidence.py",
+        "visibility": "public",
+        "interface": "cli",
+        "feature_ids": [
+          "check_evidence"
+        ]
+      },
+      {
+        "path": "scripts/collect_gitlab.py",
+        "visibility": "public",
+        "interface": "cli",
+        "feature_ids": [
+          "gitlab_collector"
+        ]
+      },
+      {
+        "path": "scripts/discover_repo.py",
+        "visibility": "public",
+        "interface": "cli",
+        "feature_ids": [
+          "discovery"
+        ]
+      },
+      {
+        "path": "scripts/evaluate_shadow.py",
+        "visibility": "public",
+        "interface": "cli",
+        "feature_ids": [
+          "shadow_evaluator"
+        ]
+      },
+      {
+        "path": "scripts/evaluate_validation.py",
+        "visibility": "public",
+        "interface": "cli",
+        "feature_ids": [
+          "validation_evaluator"
+        ]
+      },
+      {
+        "path": "scripts/graph_metrics.py",
+        "visibility": "public",
+        "interface": "library",
+        "feature_ids": [
+          "job_graph"
+        ]
+      },
+      {
+        "path": "scripts/inspect_workflows.py",
+        "visibility": "public",
+        "interface": "cli",
+        "feature_ids": [
+          "workflow_inspector"
+        ]
+      },
+      {
+        "path": "scripts/phase_map.py",
+        "visibility": "internal",
+        "interface": "library",
+        "feature_ids": [
+          "analyzer"
+        ],
+        "consumed_by": [
+          "scripts/analyze_gh.py"
+        ],
+        "reason": "Bound phase attribution used by analyze_gh; not a supported command."
+      },
+      {
+        "path": "scripts/plan_shards.py",
+        "visibility": "public",
+        "interface": "cli",
+        "feature_ids": [
+          "shard_planner"
+        ]
+      },
+      {
+        "path": "scripts/pre_push.py",
+        "visibility": "public",
+        "interface": "cli",
+        "feature_ids": [
+          "local_hook"
+        ]
+      },
+      {
+        "path": "scripts/report_gh_timings.py",
+        "visibility": "public",
+        "interface": "cli",
+        "feature_ids": [
+          "timing_report"
+        ]
+      },
+      {
+        "path": "scripts/run_budget.py",
+        "visibility": "public",
+        "interface": "cli",
+        "feature_ids": [
+          "command_budget"
+        ]
+      },
+      {
+        "path": "scripts/select_affected.py",
+        "visibility": "public",
+        "interface": "cli",
+        "feature_ids": [
+          "selector"
+        ]
+      },
+      {
+        "path": "scripts/verify_gh_attestation.py",
+        "visibility": "public",
+        "interface": "cli",
+        "feature_ids": [
+          "attestation_verifier"
+        ]
+      }
+    ]
+  }
 }
