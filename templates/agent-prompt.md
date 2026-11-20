@@ -1,33 +1,67 @@
 # CI optimization brief for a coding agent
 
-Paste this to an agent that does not have the skill installed. Fill the brackets.
+Use this brief for `[OWNER/REPO]` at `[path]`. Complete authorized implementation;
+an audit-only request remains read-only. Reuse authorization already given.
 
----
+## Goal and non-negotiable rules
 
-You are auditing CI for `[OWNER/REPO]` at `[path]`. Goal: shorter push → trustworthy PR green → integrated green → release readiness. Preserve the evidence required at each boundary.
+Make PR feedback p50 <120 seconds and p95 <180 seconds, including waiting, setup,
+work and final required-check reporting. Run the **full suite on the combined
+merge-queue candidate before main**. Selection narrows PR feedback only; bypass
+test-result cache reads in the queue. Post-push/nightly work is supplemental.
 
-Mode: **OBSERVE** unless this request already authorizes a specific implementation scope. Honor that scope without asking for repeated permission. An audit alone does not authorize purchases, protected-check/permission changes, merges, deployment or publication. Keep untrusted code out of privileged execution.
+Never hide failure through retries, wider timeouts, skips, quarantine, reduced
+coverage or ignored exits. Diagnose the first failure and fix it. Keep every failed
+benchmark trial and order seed visible. A replacement must catch everything the
+old tool did or retain a specific measured compatibility check.
 
-Steps:
-1. Read `AGENTS.md`/`CLAUDE.md`/`CONTRIBUTING`/`CODEOWNERS` and every CI config. Resolve applicable policy and any conflicts with the user's authorized scope before changing gates.
-2. Inventory provider, stack, dependencies, tests, required checks and trust boundaries. Classify commands by inspected behavior into **code rules**, **change correctness**, **integrated main**, and **release readiness**; names like `lint` or `check` prove nothing. Record each unique obligation and its enforcement boundary; secret names only.
-3. Measure both latest-revision PR feedback (exact push receipt → complete current-revision PR gate) and first-push PR journey (first push → first complete current-revision green, including repair delays). Report p50/p95, queue/setup/retries, window and sample size; keep failed/cancelled/superseded/unvalidated counts visible. Missing data stays `unknown`; name timestamp proxies. Propose a configurable 300-second p95 objective only if none is chosen, label it a target and state which metric it governs. A timeout or dropped check never satisfies the budget.
-4. Build the job/dependency DAG. Run relevant change tests on PRs using a verified graph and change-to-check contract. High risk or unknown base/graph/coverage/confidence forces FULL before integration. Hooks are optional; CI remains authoritative.
-5. Choose integrated validation: a merge queue/train tests the combined candidate before admission; post-push rolling CI requires an explicitly accepted broken-main risk policy. For rolling CI specify candidate coalescing, cancellation, bounded postponement/progress guarantee, backpressure, maximum green age/head distance and failure ownership. Release only from the exact full-green eligible revision; later main commits inherit no green.
-6. Keep queue candidate SHA, final main SHA and build source distinct. Verify their relationship or rerun. Bind evidence to immutable artifact digest plus validation/workflow/toolchain/input policy fingerprint; tree equality alone is insufficient when builds depend on refs or commit identity. Stale or mismatched evidence cannot grant release eligibility.
-7. Define release readiness for the actual product: test flag states and compatibility, then staged exposure with telemetry thresholds, observation windows, minimum samples and abort criteria; missing telemetry pauses progression. Migrations/data effects need separate compatibility/recovery proof. Libraries/CLIs may need package-install, consumer and staging gates instead of traffic canaries. Passing readiness does not authorize deployment or publication.
-8. Score the seven optimization modules: fast runners, native lint/typecheck, machines/test reuse, caching/checkout, parallel work, affected tasks, optional hooks. Activate only supported modules; estimate required-path time and runner-minutes separately, with confidence, risks, effort and next proof.
-9. Hunt false greens and identity errors. Preserve required gates and test child failures, unexpected skips, cancellations, timeouts, missing reports/shards and wrong/stale evidence. For GitHub queues, verify required `merge_group` checks. Shadow selected versus FULL validation on the same revisions before moving gates.
-10. Report ordered reversible interventions with acceptance criteria, evidence, risk policy and rollback. Distinguish same-workload acceleration from scheduling redistribution: moving tests later requires reporting total PR/main/release work, full-green delay and residual risk. In OBSERVE, deliver the proposal; in authorized implementation, complete the approved scope.
+## Work in this order
 
-When implementing: preserve every required obligation across categories, keep check identities or migrate them explicitly, and prove negative cases reject green. Use ≥10 comparable runs per arm before claiming equivalent-work speed-up; missing evidence is preliminary. See [validation architecture](../references/08-validation-architecture.md) for the full decision procedure.
+1. Read repository policy and actual commands, CI topology, required checks and
+   provider rules. Keep untrusted code away from privileged tokens and caches.
+2. Pull the last 150 runs and all jobs/attempts. Report fewer available runs,
+   pagination/access gaps and retention. Split **every job** into waiting, setup,
+   running and residual time at p50/p95; show n, failures, cancellations and reruns.
+   Unknown timing is not zero. Fix the largest measured bucket on the required path.
+3. Classify code rules, change correctness, full integration and release readiness.
+   Verify an active queue rule plus `merge_group` workflow on GitHub. Preserve the
+   required aggregate; a skipped/cancelled/missing child cannot pass it. Give queue
+   runs unique concurrency groups; cancel superseded PR runs only.
+4. Apply stack-appropriate defaults: every repository job on Blacksmith after app
+   activation; waiting <10 s. Setup <30 s, >95% exact PR hits from trusted main,
+   exact-compatible `node_modules` cache, frozen cold installs, full-history blobless
+   checkout. Record a measured reason or activation blocker for any exception.
+5. Compare old/new side by side before each tool switch. Prefer Oxlint (<5 s),
+   `bun check --no-script` (<5 s; TS7 fallback), Oxfmt, Bun installs/scripts and tsrs
+   locally. Compare rules, files, diagnostics, compiler options, declarations,
+   formatter/plugin coverage and lifecycle behavior. Remove old tools after parity.
+6. Parallelize independent lint/types/build/tests. Separate migrations and unrelated
+   apps into their own required jobs. Benchmark 8-core test machines before adding
+   shards; balance by measured durations, <60 s/shard, worker count matched to CPU
+   and memory, a DB per shard plus worker data isolation.
+7. Prove file cleanup and leak resistance before Vitest `isolate: false`. Execute
+   cleanup and document it in AGENTS.md; keep seeds and test IDs/count/coverage.
+8. Use Nx/Turbo affected only on PRs with a trustworthy graph and FULL fallback.
+   Deliberately hide a real breaking dependency change; execute selected and full
+   suites and require the guard to turn red. Queue execution remains unfiltered.
+9. Install an actual <9-second pre-push hook for changed-file format/lint and
+   affected-project/dependent typechecking. Preserve existing hooks, use safe argv,
+   verify execution and failure propagation. CI remains authoritative.
+10. Enforce each job/stage budget without masking underlying failures. Keep rolling
+    percentile checks, exact cache-hit ratios and per-command limits distinct.
+    Unknown evidence cannot certify a target; report a live verifier's own pending
+    completion honestly and verify it after completion.
+11. Open one small PR per independently reversible intervention with **real** linked
+    before/after runs, source/tool/config identity, n, workload/coverage parity,
+    misses, cost and rollback. Never infer p95 from one run or call deferred work
+    eliminated. Merge only through the full-suite queue when authorized.
 
-Available read-only helpers: `discover_repo.py` routes positive evidence to relevant
-stack adapters; `collect_gh.py` creates immutable manifest-backed snapshots;
-`analyze_gh.py` computes cohort/attempt/graph diagnostics; `inspect_workflows.py`
-reviews normalized workflow semantics. `benchmark.py` captures before/after
-provenance and cleans process groups. `check_reports.py` verifies shard transport.
-`evaluate_validation.py` evaluates reviewed four-category policy against normalized
-evidence, with explicit `--require` result gating. Read every helper's `--help` and
-the [evidence contract](../references/11-evidence-formats.md). None authenticates
-arbitrary JSON assertions, authorizes deployment, or proves an untested stack works.
+Finish all possible work before returning one account/app/secret/admin/spend list
+with expected monthly costs, rates, allowances and assumptions. Finish with total
+CI time, aggregate runner use and cost before/after; separate estimates from billing.
+Do not invent a PAT requirement or upgrade plan when the existing account suffices.
+
+Read the [strict contract](../references/14-two-minute-ci.md), [tool migration](../references/15-toolchain-migration.md),
+[audit field guide](../references/12-field-guide.md) and [evidence formats](../references/11-evidence-formats.md).
+Helpers provide scoped evidence, not automatic source authentication, queue enforcement
+or deployment authorization. Keep exact revision/artifact provenance for releases.

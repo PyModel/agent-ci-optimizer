@@ -1,5 +1,7 @@
 # Seven-module playbook
 
+Apply the [strict contract](14-two-minute-ci.md) and [current tool migration](15-toolchain-migration.md) first. These component experiments explain compatibility; they do not override the required queue, budgets or no-retry policy.
+
 Each module: when it applies, the experiment, the counterexamples that make it a loss, and the gate. Facts dated 2026-11-01 come from [official sources](06-official-sources.md); re-check versions before quoting them. Config snippets: [recipes](07-config-recipes.md).
 
 First map the [four validation categories](08-validation-architecture.md). Reducing PR
@@ -21,7 +23,7 @@ queue semantics. Read the dated feature matrix before assuming target support.
 
 **Options** (verify current terms; vendor speed claims are marketing, not evidence for this repo):
 - GitHub larger runners: Team or Enterprise Cloud plans only; billed per minute, including on public repos.
-- Blacksmith: labels like `blacksmith-4vcpu-ubuntu-2404`; each job runs in a Firecracker microVM on Blacksmith's bare metal, destroyed after the job. Per-minute price not confirmed from docs on 2026-11-01: get a quote before approving.
+- Blacksmith: labels like `blacksmith-4vcpu-ubuntu-2404`; each job runs in a Firecracker microVM on Blacksmith's bare metal, destroyed after the job. Base x64 pricing and the shared free allowance were verified 2026-11-20; see the [cost contract](14-two-minute-ci.md#small-prs-and-cost). Confirm actual size, billing granularity and unused allowance before approving spend.
 - Depot: `depot-ubuntu-24.04`; ephemeral single-tenant EC2 instances, never reused; per-second billing.
 - Self-hosted: only ephemeral (one job per VM/container). Persistent runners on public repos let fork PRs execute on your hardware.
 
@@ -57,7 +59,7 @@ queue semantics. Read the dated feature matrix before assuming target support.
 
 **Cache scope (GitHub).** A run can restore caches from its own branch or the default branch, never from sibling or child branches; a PR cache is scoped to the PR merge ref and only re-runs of that PR can restore it. So: warm the default-branch cache from `push` to main, and let PRs read it.
 
-**Keys.** Include lockfile hash, OS, arch, toolchain version, and any build-affecting env. `restore-keys` fallbacks are fine for package stores (content-addressed) and dangerous for build outputs (stale artifacts). Prefer `actions/setup-node` / `setup-python` built-in caches for package stores: setup-node caches npm automatically only when `packageManager` names npm; yarn/pnpm need `cache:`; setup-python caching is opt-in (`pip`, `pipenv`, `poetry`).
+**Keys.** Include lockfile hash, OS, arch, toolchain version, and any build-affecting env. `restore-keys` fallbacks are fine for package stores (content-addressed) and dangerous for build outputs (stale artifacts). The strict JS default also benchmarks exact-key `node_modules` caching; package stores alone do not satisfy it. `actions/setup-node` / `setup-python` built-in caches cover package stores: setup-node caches npm automatically only when `packageManager` names npm; yarn/pnpm need `cache:`; setup-python caching is opt-in (`pip`, `pipenv`, `poetry`).
 
 **Clone.** `actions/checkout` defaults to `fetch-depth: 1`. `filter: blob:none` gives a partial clone (blobs fetched on demand) and overrides sparse-checkout; it does **not** change depth by itself. Affected tools need the base commit: Turborepo treats every package as changed when the checkout is too shallow; Nx needs `NX_BASE` reachable. Typical fix: `fetch-depth: 0` + `filter: blob:none`.
 
@@ -84,14 +86,12 @@ queue semantics. Read the dated feature matrix before assuming target support.
 **Gate.** Edited tests are included along with affected tests and transitive dependents;
 unknown or high-risk inputs select FULL. Shadow selected vs full results and replay
 adversarial diffs before moving required work. Zero observed escapes is evidence, not
-a guarantee. Keep category-3 full verification under the accepted merge-queue or
-rolling-main policy, and certify only tested commits/artifacts; scheduled runs supplement
-that policy. See [full-suite policy](08-validation-architecture.md).
+a guarantee. Keep category-3 full verification on the combined merge-queue candidate before main, bypass test-result caches, and certify only tested commits/artifacts; scheduled runs supplement the queue. See [full-suite policy](08-validation-architecture.md).
 
 ## 7. Local hooks
 
 **Experiment.** Fast changed-file format/lint in pre-commit, and project-level checks in
-pre-push only when measured cheap. Compilation is not universally fast. Use existing
+an installed pre-push hook targeting <9 seconds. Check affected projects/dependents; compilation is not universally fast. Use existing
 lefthook, husky + lint-staged or pre-commit configuration where appropriate. Run the
 same authoritative category-1 checks in CI; hooks provide earlier feedback.
 

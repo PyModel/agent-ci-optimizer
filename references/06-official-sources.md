@@ -29,9 +29,9 @@ future compatibility. Re-open sources before quoting a current version or price.
 
 ## Validation architecture and reviewed updates (2026-11-17)
 
-The four-category placement, 300-second PR objective, rolling-main controls and
-release evidence contract are proposed design rules, not measured improvements or
-provider guarantees. Keep exact repository policy and tool/platform support explicit.
+The earlier four-category/rolling-main material is retained as historical analysis.
+The 2026-11-20 strict contract requires pre-main queue execution and p50 <120 s /
+p95 <180 s; these are user requirements, not provider guarantees or measured gains.
 
 | Topic | Fact relied on | URL |
 |---|---|---|
@@ -119,3 +119,32 @@ support for every stack or a measured performance improvement.
 | Gradle optimization | Configuration caching is separate from task-output build caching | https://docs.gradle.org/current/userguide/performance.html · https://docs.gradle.org/current/userguide/configuration_cache.html |
 | Apple test automation | Xcode separates build-for-testing and test-without-building | https://developer.apple.com/library/archive/technotes/tn2339/_index.html |
 | Native test scheduling | Evaluate timing-based and dynamic split behavior against startup cost | https://circleci.com/docs/guides/test/use-dynamic-test-splitting/ · https://buildkite.com/docs/pipelines/configure/tests/bktec/installing-and-using-the-client |
+
+## Strict contract and toolchain review (2026-11-20)
+
+The 120/180-second PR targets and per-stage budgets are user requirements. None
+is a provider SLA. Current tool support is conditional on repository parity tests.
+
+| Topic | Fact relied on | URL |
+|---|---|---|
+| Bun check dispatch and scope | `--no-script` forces the built-in checker; ordinary checking differs from AOT; project references and no declaration emission need explicit coverage | https://bun.sh/docs/runtime/check |
+| TypeScript native compiler | Native-port development moved to TypeScript; RC/stable command is `tsc`, unlike the earlier preview `tsgo` | https://github.com/microsoft/TypeScript-go · https://github.com/microsoft/TypeScript |
+| tsrs compatibility | Fast mode and local checking require pinned repository conformance tests | https://github.com/oxc-project/tsrs |
+| tsrs Oxlint backend | Integration announced 2026-11-17; compare diagnostics, elapsed time and memory before switching | https://oxc.rs/blog/2026-11-17-faster-type-aware-linting-with-tsrs |
+| Oxlint migration | Preserve required rules/plugins; local plugins may need manual migration; retain only unsupported coverage | https://oxc.rs/docs/guide/usage/linter/migrate-from-eslint.html |
+| Oxlint categories | `all` excludes nursery and does not enable plugins; warning exit behavior needs explicit configuration | https://oxc.rs/docs/guide/usage/linter/cli |
+| Combined lint/typecheck | Type diagnostics follow lint ignores and linted-file coverage; full-project coverage is not automatic | https://oxc.rs/docs/guide/usage/linter/type-aware.html |
+| Oxfmt compatibility | Plugin/options and npm-versus-standalone format coverage differ | https://oxc.rs/docs/guide/usage/formatter/migrate-from-prettier.html · https://oxc.rs/docs/guide/usage/formatter/unsupported-features · https://oxc.rs/docs/guide/usage/formatter/language-support |
+| Bun dependency integrity | Explicit frozen installs and lifecycle trust; restored modules need compatible cache inputs/output checks | https://bun.com/docs/pm/cli/install · https://bun.com/docs/pm/lifecycle |
+| Vitest measured reuse | Profile first; `doctor` finds candidate configurations, not CI p50/p95 evidence | https://vitest.dev/guide/improving-performance · https://vitest.dev/guide/cli |
+| Vitest shared state | Setup files rerun per file while imported modules remain cached without isolation | https://vitest.dev/config/setupfiles |
+| Vitest order/workers | Seeded shuffle trades off longest-first scheduling; file workers differ from in-worker concurrency | https://vitest.dev/config/sequence · https://vitest.dev/guide/parallelism |
+| Queue admission | `merge_group` required for queue checks; public organization repositories are eligible; every queue entry must pass under this contract | https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue |
+| Concurrency | Pending runs can be replaced in a shared group; use unique queue groups and PR-only cancellation | https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency |
+| Cache hit semantics | Exact `cache-hit` differs from fallback restore; default-branch caches are PR-readable | https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching |
+| node_modules | setup-node caches manager stores, not installed node_modules | https://github.com/actions/setup-node/blob/main/README.md |
+| Full suite execution | Nx `--skip-nx-cache` and Turbo `--force` bypass task-result cache reads | https://nx.dev/docs/kb/skipping-cache · https://turborepo.dev/docs/reference/run |
+| Blacksmith activation | Organization GitHub App must cover each runner-using repository before labels switch | https://docs.blacksmith.sh/introduction/quickstart |
+| Blacksmith sizing/cost | Available 8-vCPU labels; shared 3,000 base-equivalent monthly minutes; size-adjusted allowance | https://docs.blacksmith.sh/blacksmith-runners/overview |
+| Blacksmith pricing | Listed x64 base rate $0.004/min; optional storage separately priced; OSS program requires application | https://www.blacksmith.sh/pricing |
+| GitHub public billing | Standard hosted compute in public repositories is free; actual plan/storage/larger-runner charges remain separate | https://docs.github.com/en/billing/concepts/product-billing/github-actions |

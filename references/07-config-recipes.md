@@ -1,6 +1,8 @@
 # Config recipes
 
-Starting points to adapt, not paste. The examples use source-reviewed action majors
+Starting points to adapt, not paste. Apply the [strict contract](14-two-minute-ci.md)
+and [current tool migration](15-toolchain-migration.md) first. Older manager/runner
+examples below describe component wiring; retaining them needs a measured reason. The examples use source-reviewed action majors
 (checkout v7, setup-node v7, setup-python v7, cache v6, upload-artifact v7,
 download-artifact v8, setup-go v7, setup-uv v10, setup-bun v2, nx-set-shas v5,
 pnpm/action-setup v6). Verify the exact current release and runtime support, then pin
@@ -11,7 +13,7 @@ new syntax separately. No downstream stack execution is implied by these example
 
 First map [the four validation categories](08-validation-architecture.md). The full-test
 example below preserves every check on each event; it is not a universal PR schedule.
-Moving full verification to a queue or rolling-main lane requires the documented policy,
+Moving full verification from the PR feedback lane to the required pre-main merge queue requires the documented policy,
 selector shadow evidence and an aggregate that evaluates the work intended for that event.
 
 ## Parallel jobs + one aggregate required check
@@ -31,7 +33,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   lint:
@@ -106,7 +108,7 @@ jobs:
             || { echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'; exit 1; }
 ```
 
-If some needs may skip, keep the workflow itself eligible for every protected candidate.
+Intentional job omission applies only to verified PR feedback selection. On merge_group, require every full-suite job/shard and disable selection. If some PR needs may skip, keep the workflow itself eligible for every protected candidate.
 The selector must be a direct need of the aggregate; validate its successful
 completion, candidate revision, event, and explicit per-job decision before using
 its outputs. Accept `skipped` only for a job that the validated decision marks not
@@ -166,7 +168,10 @@ Hand-rolled cache: key = OS + arch + toolchain + lockfile hash. Restore-only on 
     filter: blob:none
     persist-credentials: false
 - uses: nrwl/nx-set-shas@v5            # sets NX_BASE / NX_HEAD
-- run: pnpm nx affected -t lint test typecheck
+- if: github.event_name == 'pull_request'
+  run: bun run nx affected -t lint test typecheck
+- if: github.event_name != 'pull_request'
+  run: bun run nx run-many -t lint test typecheck --skip-nx-cache
 ```
 
 Turborepo: `turbo run test --affected` (base override `TURBO_SCM_BASE=${{ github.event.pull_request.base.sha }}`). Shallow checkout makes every package "changed": correct but slow.
@@ -250,16 +255,22 @@ Leak check: `vitest run --project unit --sequence.shuffle --sequence.seed=$RANDO
 
 ## Pre-push hook (lefthook)
 
+Configure one aggregate hook command so the <9-second budget covers process startup
+and all local checks. The repository-owned prepush script must pass NUL-delimited
+changed paths as argv to pinned `oxfmt --check` and `oxlint`, then run pinned
+`tsrs --noEmit --fast` (or the parity-verified fallback) on affected projects and
+reverse dependents. Do not interpolate arbitrary filenames into shell text.
+
 ```yaml
-# lefthook.yml
+# lefthook.yml; scripts/prepush-checks.ts implements the reviewed commands above.
 pre-push:
-  parallel: true
   commands:
-    lint:
-      glob: "*.{js,ts,tsx}"
-      run: npx oxlint {push_files}
-    types:
-      run: npx tsc --noEmit -p tsconfig.json
+    verify:
+      run: python3 scripts/run_budget.py --seconds 9 --label pre-push -- bun scripts/prepush-checks.ts
 ```
 
-Use the same commands and versions CI uses. CI remains authoritative.
+Adapt this only after the script and helper exist. Install with the pinned local
+hook manager (for example `bun run lefthook install`), inspect the configured hook
+path and executable, invoke the real hook and prove an intentional formatting,
+lint or type error propagates nonzero. Keep identical configs/versions in CI.
+This is a wiring recipe, not a shipped TS path selector or an installed hook.
