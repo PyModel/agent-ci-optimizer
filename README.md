@@ -39,6 +39,19 @@ Detection produces evidence for agent review, not permission to remove checks.
 
 ## Install
 
+Clone the canonical repository:
+
+```bash
+git clone https://github.com/PyModel/ci-optimiser.git
+cd ci-optimiser
+```
+
+For an existing clone, update its origin URL:
+
+```bash
+git remote set-url origin https://github.com/PyModel/ci-optimiser.git
+```
+
 For an existing installation, inspect the old `agent-ci-optimizer` symlink and
 confirm that it points to this checkout before removing that symlink. Then use the
 new name below so agents discover one copy of the skill. Keep any real directory
