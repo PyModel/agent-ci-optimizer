@@ -194,6 +194,15 @@ class BehaviorResultsTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 checker.load_json(path)
 
+    def test_nested_nonfinite_settings_cannot_pass_as_matching_configuration(self):
+        path = self.root / 'overflow.json'
+        path.write_text('{"generation":{"temperature":1e999}}')
+        settings = checker.load_json(path)
+        for arm in self.ledger['arms'].values():
+            arm['settings'] = copy.deepcopy(settings)
+        with self.assertRaisesRegex(ValueError, 'Out of range float values'):
+            self.validate()
+
     def test_cli_exit_codes_preserve_blocked_and_invalid_results(self):
         ledger_path = self.root / 'ledger.json'
         command = [sys.executable, str(ROOT / 'scripts/check_behavior_results.py'), str(ledger_path),

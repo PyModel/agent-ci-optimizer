@@ -69,6 +69,9 @@ def case_inventory(suite, rubric):
 
 
 def validate(ledger, suite, rubric, evidence_root):
+    # JSON exponents such as 1e999 can overflow even with parse_constant rejection.
+    # Validate arbitrary nested settings too, not just numeric timing fields.
+    digest(ledger)
     cases = case_inventory(suite, rubric)
     fields(ledger, 'schema suite_sha256 rubric_sha256 baseline_arm candidate_arm arms '
            'case_ids repetitions trials', 'ledger')
