@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import os
 import unittest
 from pathlib import Path
 
@@ -21,7 +22,15 @@ def anchors(path: Path) -> set[str]:
     return {slug(m.group(1)) for m in re.finditer(r"^#{1,6} (.+)$", text, re.M)}
 
 
-def broken_links(root: Path) -> list[str]:
+def source_root() -> Path | None:
+    """Installed bundles do not depend on checkout-only README/CI/hook files."""
+    candidate = ROOT.parent.parent
+    if ROOT.name == "ci-optimiser" and ROOT.parent.name == "skills" and (candidate / ".git").exists():
+        return candidate
+    return None
+
+
+def broken_links(root: Path, *, boundary: Path | None = None) -> list[str]:
     problems = []
     for md in sorted(root.rglob("*.md")):
         if ".git" in md.parts or ".ci-audit" in md.parts or ".claude" in md.parts:
@@ -32,6 +41,9 @@ def broken_links(root: Path) -> list[str]:
             file_part, _, anchor = target.partition("#")
             dest = (md.parent / file_part).resolve() if file_part else md
             rel = md.relative_to(root)
+            if boundary is not None and not dest.is_relative_to(boundary.resolve()):
+                problems.append(f"{rel}: link leaves installed bundle: {target}")
+                continue
             if not dest.exists():
                 problems.append(f"{rel}: missing {target}")
             elif anchor and dest.suffix == ".md" and anchor not in anchors(dest):
@@ -55,7 +67,22 @@ class SkillDocsTest(unittest.TestCase):
         self.assertLessEqual(len(core.read_bytes()), 13 * 1024)
 
     def test_links_resolve(self):
-        self.assertEqual(broken_links(ROOT), [])
+        self.assertEqual(broken_links(ROOT, boundary=ROOT), [])
+        repository = source_root()
+        if repository is not None:
+            self.assertEqual(broken_links(repository), [])
+
+    def test_bundle_entrypoint_license_and_source_scaffolding(self):
+        self.assertEqual(list(ROOT.rglob("SKILL.md")), [ROOT / "SKILL.md"])
+        self.assertTrue((ROOT / "LICENSE").is_file())
+        repository = source_root()
+        if repository is not None:
+            self.assertFalse((repository / "SKILL.md").exists())
+            for path in ("README.md", "AGENTS.md", "LICENSE", ".githooks/pre-push",
+                         ".github/workflows/ci.yml", ".github/dependabot.yml"):
+                self.assertTrue((repository / path).is_file(), path)
+            self.assertTrue(os.access(repository / ".githooks/pre-push", os.X_OK))
+            self.assertEqual((ROOT / "LICENSE").read_bytes(), (repository / "LICENSE").read_bytes())
 
     def test_checker_can_fail(self):
         import tempfile

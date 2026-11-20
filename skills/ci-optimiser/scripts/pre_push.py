@@ -23,7 +23,8 @@ import subprocess
 import sys
 import unittest
 
-ROOT = Path(__file__).resolve().parent.parent
+BUNDLE_ROOT = Path(__file__).resolve().parent.parent
+BUNDLE_PATH = Path("skills/ci-optimiser")
 MAX_INPUT = 1024 * 1024
 MAX_SOURCE = 2 * 1024 * 1024
 SHA = re.compile(r"[0-9a-f]{40}(?:[0-9a-f]{24})?\Z")
@@ -36,6 +37,14 @@ def git(root, *args, data=b""):
     if result.returncode:
         raise ValueError("Git evidence/check failed; verify local commits and diff whitespace")
     return result.stdout
+
+
+def source_repository():
+    """Bind this maintainer hook to its source checkout, never an installed copy."""
+    root = Path(git(Path.cwd(), "rev-parse", "--show-toplevel").decode("utf-8").strip()).resolve()
+    if (root / BUNDLE_PATH).resolve() != BUNDLE_ROOT:
+        raise ValueError("run the pre-push hook from this skill's source checkout, not an installed copy")
+    return root
 
 
 def parse_updates(raw):
@@ -117,7 +126,7 @@ def syntax_checks(root, head, changed):
 def repository_contracts(root):
     suite, loader = unittest.TestSuite(), unittest.TestLoader()
     for pattern in CONTRACTS:
-        tests = loader.discover(str(root / "tests"), pattern=pattern)
+        tests = loader.discover(str(root / BUNDLE_PATH / "tests"), pattern=pattern)
         if tests.countTestCases() == 0:
             raise ValueError("required repository contract tests are missing")
         suite.addTests(tests)
@@ -155,7 +164,7 @@ def main(argv=None):
         print("pre-push: expected Git's two remote arguments and ref-update stdin.", file=sys.stderr)
         return 2
     try:
-        check_push(ROOT, sys.stdin.buffer.read(MAX_INPUT + 1))
+        check_push(source_repository(), sys.stdin.buffer.read(MAX_INPUT + 1))
     except (OSError, UnicodeError, ValueError, KeyError) as exc:
         message = str(exc) if type(exc) is ValueError else "could not safely read/check repository evidence"
         print("pre-push: " + message, file=sys.stderr)

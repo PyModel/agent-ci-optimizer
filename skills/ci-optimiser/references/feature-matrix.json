@@ -1302,17 +1302,15 @@
       "support_constraints": [
         "A configured remote CI matrix is not evidence that the changed commit ran on GitHub",
         "Dependabot proposes updates; adoption still requires review and target validation",
-        "Installed linters can lag native platform syntax; preserve explicit compatibility fixtures"
+        "Installed linters can lag native platform syntax; preserve explicit compatibility fixtures",
+        "Workflow and Dependabot configuration live in the source repository root, outside the installed bundle; inspect that checkout to verify them"
       ],
       "verification": {
         "kind": "source_review",
         "runtime_execution": "not_executed",
         "downstream_runtime_compatibility": "unverified"
       },
-      "implementation_paths": [
-        ".github/workflows/ci.yml",
-        ".github/dependabot.yml"
-      ],
+      "implementation_paths": [],
       "documentation_paths": [
         "references/10-stack-adapters.md",
         "references/09-platform-updates.md"
@@ -2411,13 +2409,11 @@
         "toolchain_maintenance",
         "feature_register"
       ],
-      "implementation_scope": "Own workflow lint, reviewed action pins, Dependabot configuration and compatibility inventory are present.",
+      "implementation_scope": "The source repository retains workflow lint, reviewed action pins and Dependabot configuration; the installed bundle carries compatibility guidance and inventory, without duplicating checkout-only CI files.",
       "remaining_target_validation": [
         "Run the changed commit in GitHub CI and review future updates; local tests do not prove every downstream action/tool runtime."
       ],
       "implementation_paths": [
-        ".github/workflows/ci.yml",
-        ".github/dependabot.yml",
         "references/feature-matrix.json"
       ],
       "documentation_paths": [
