@@ -1,0 +1,47 @@
+{
+  "schema": "ci-job-budgets/1",
+  "jobs": {
+    "test (3.10)": {
+      "waiting_s": 10,
+      "setup_s": 30,
+      "running_s": 60,
+      "runner_s": 95,
+      "setup_end_step": "Set up Python",
+      "work_steps": [
+        "Unit + packaging tests"
+      ]
+    },
+    "test (3.x)": {
+      "waiting_s": 10,
+      "setup_s": 30,
+      "running_s": 60,
+      "runner_s": 95,
+      "setup_end_step": "Set up Python",
+      "work_steps": [
+        "Unit + packaging tests"
+      ]
+    },
+    "workflow-lint": {
+      "waiting_s": 10,
+      "setup_s": 30,
+      "running_s": 5,
+      "runner_s": 40,
+      "setup_end_step": "Install verified actionlint",
+      "work_steps": [
+        "Validate workflows"
+      ]
+    },
+    "ci": {
+      "waiting_s": 10,
+      "setup_s": 30,
+      "running_s": 20,
+      "runner_s": 55,
+      "setup_end_step": "Checkout repository",
+      "work_steps": [
+        "Require success",
+        "Read job timing evidence",
+        "Enforce job budgets"
+      ]
+    }
+  }
+}
