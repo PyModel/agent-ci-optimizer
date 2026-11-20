@@ -148,3 +148,12 @@ is a provider SLA. Current tool support is conditional on repository parity test
 | Blacksmith sizing/cost | Available 8-vCPU labels; shared 3,000 base-equivalent monthly minutes; size-adjusted allowance | https://docs.blacksmith.sh/blacksmith-runners/overview |
 | Blacksmith pricing | Listed x64 base rate $0.004/min; optional storage separately priced; OSS program requires application | https://www.blacksmith.sh/pricing |
 | GitHub public billing | Standard hosted compute in public repositories is free; actual plan/storage/larger-runner charges remain separate | https://docs.github.com/en/billing/concepts/product-billing/github-actions |
+
+## Manual cloud timing audit (2026-11-20)
+
+| Topic | Fact relied on | URL |
+|---|---|---|
+| Manual dispatch | Workflow must exist on the default branch; a repository writer can dispatch it | https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow |
+| Built-in token | Workflow permissions expose Actions/content reads, not repository administration | https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#permissions |
+| Protection evidence | Classic required status-check protection requires Administration read access | https://docs.github.com/en/rest/branches/branch-protection#get-status-checks-protection |
+| Report artifact | Upload action v7.0.2 pinned to cf430e030ddbb5b0abf93d22962f4752f3646cd9; explicit paths and one-day retention | https://github.com/actions/upload-artifact/tree/cf430e030ddbb5b0abf93d22962f4752f3646cd9 |

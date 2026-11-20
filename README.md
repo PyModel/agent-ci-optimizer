@@ -98,6 +98,38 @@ A symlink install serves this working tree as-is, so uncommitted edits reach eve
 To export only the complete package, run
 `git archive HEAD:skills/ci-optimiser | tar -x -C <dest>` into an existing destination.
 
+## Run a timing audit in GitHub's cloud
+
+After the `CI timing audit` workflow is merged to the default branch, open
+**Actions → CI timing audit → Run workflow** and select the default branch.
+It uses this repository's built-in read-only `GITHUB_TOKEN`; no extra secret,
+CloudBees account or runner installation is needed. It executes the deterministic
+Python collector and analyzer, not an LLM agent. It cannot edit the repository.
+
+The manual workflow samples the last 150 retained runs across all outcomes,
+including incomplete runs, and collects available attempt history. It publishes
+job waiting/setup/running p50 and p95 diagnostics in the run summary and a
+one-day report/JSON artifact. Published JSON allows only timing fields, bounded
+workflow/job labels and outcome counts; it excludes step names (which can contain
+shell commands), branch metadata, raw API snapshots, logs and arbitrary extra fields.
+Deleted/expired history remains unknown. The collector caps
+attempt history at 100 per run; missing jobs, attempts or source identity fail
+collection. Unknown/censored timings remain visible instead of becoming zeros.
+
+**Protection and security/merge eligibility are not assessed.** The explicit
+`collect_gh.py --timings-only` scope avoids administration-only protection reads;
+the normal full audit still fails when required protection evidence is unavailable.
+This workflow must not become a required merge check. Its green result confirms
+the requested timing sample was collected, not that historical builds passed or
+the PR speed target was met. It does not change the full-suite `ci` workflow.
+
+Collection gets 180 seconds, analysis 10, report generation 5, summary output 2,
+artifact upload 1 minute, and the job 5 minutes total. Collection uses zero retries
+and a 10-second request timeout; workflow re-runs are rejected. These are bounds
+for a manual history audit, not measurements of PR feedback. Standard GitHub-hosted
+compute is free for this public repository; report artifacts use the account's
+shared storage allowance. The one-day retention limits that usage.
+
 ## Test
 
 ```bash
