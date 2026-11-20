@@ -75,6 +75,10 @@ count is unknown; reaching 40 is not a significance test or budget certificate.
 Outcome counts remain visible. The published projection excludes raw step commands
 and unrestricted cohort fields; richer summaries must preserve that boundary.
 
+Provider attempt buckets are counter-based, not proof that an earlier attempt
+executed tests. Preserve separately verified [approval-only history](13-measured-adapters.md#pr-approval-history)
+before describing a later provider attempt as an execution retry.
+
 ### Reviewed phase attribution
 
 Without `--phase-map`, phase attribution is a **preliminary step-name heuristic**:

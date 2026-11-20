@@ -177,3 +177,11 @@ is a provider SLA. Current tool support is conditional on repository parity test
 The historical Helm example does not establish which current setup-go version ran,
 whether a second archive came from public storage or a runner-local backend, or
 whether disabling it improves the required CI path. Preserve those unknowns.
+
+## PR approval-only attempt evidence (2026-11-20)
+
+| Topic | Fact relied on | URL |
+|---|---|---|
+| Exact attempt metadata | A read-only endpoint identifies one workflow run attempt; Actions read permissions suffice for authenticated access | https://docs.github.com/en/rest/actions/workflow-runs#get-a-workflow-run-attempt |
+| Exact attempt jobs | Job inventories can be scoped to one attempt and include a total count; a nonzero or incomplete inventory is not zero execution | https://docs.github.com/en/rest/actions/workflow-jobs#list-jobs-for-a-workflow-run-attempt |
+| Observed approval hold | Run 44781673275 attempt 1 was completed/action_required with total_count 0 and no jobs; its approval resumed provider attempt 2. The later failed execution remains a failure | https://api.github.com/repos/PyModel/ci-optimiser/actions/runs/44781673275/attempts/1 · https://api.github.com/repos/PyModel/ci-optimiser/actions/runs/44781673275/attempts/1/jobs?per_page=100 · https://api.github.com/repos/PyModel/ci-optimiser/actions/runs/44781673275/attempts/2 |
