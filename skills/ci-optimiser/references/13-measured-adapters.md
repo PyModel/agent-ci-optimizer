@@ -107,6 +107,13 @@ cohort, an exact hit, fallback hit, miss, restore failure, save failure,
 write-disabled state, and unknown are distinct outcomes. A measured sample
 does not prove that the difference is on the required path.
 
+`negative_savings_event_count`, `negative_savings_event_ids` and the
+`measured_negative_cache_events` warning expose measured losses even when a
+positive event offsets them or incomplete costs leave total savings unknown.
+These are observation-level investigation signals, not proof of a population
+regression or permission to remove a cache. The aggregate recommendation remains
+conservative and missing costs remain unknown.
+
 ### Remaining integration work
 
 Provider fixtures cover the contracts of the new collectors; they are not live
