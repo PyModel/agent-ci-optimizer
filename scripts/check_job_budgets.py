@@ -147,7 +147,7 @@ def check_job(job, limits, current):
             if not {"status", "conclusion", "started_at", "completed_at"} <= step.keys():
                 raise ValueError("step state or timing evidence is missing")
             state, conclusion = step.get("status"), step.get("conclusion")
-            if state == "queued" and live:
+            if state in ("queued", "pending") and live:
                 if any(step.get(key) is not None for key in ("started_at", "completed_at", "conclusion")):
                     raise ValueError("queued step has contradictory timing or conclusion")
                 by_name[step["name"]] = (None, None, state)
@@ -155,7 +155,7 @@ def check_job(job, limits, current):
                 continue
             if unfinished:
                 raise ValueError("a step executed after an unfinished step")
-            if state not in {"completed", "in_progress"} or (state == "in_progress" and not live):
+            if state not in ("completed", "in_progress") or (state == "in_progress" and not live):
                 raise ValueError("step has missing or unexpected execution state")
             if (state == "completed" and conclusion != "success") or (state == "in_progress" and conclusion is not None):
                 raise ValueError("non-success or contradictory step conclusion")
@@ -174,10 +174,11 @@ def check_job(job, limits, current):
         work = [by_name.get(name) for name in limits["work_steps"]]
         if any(step is None for step in work):
             raise ValueError("an explicit work step is missing")
-        begun = [step[0] for step in work if step[0] is not None]
-        if not begun:
+        # The first work step is the earliest declared work step in execution
+        # order, not whichever later work step happens to have a timestamp.
+        first_work = next(step[0] for name, step in by_name.items() if name in limits["work_steps"])
+        if first_work is None:
             raise ValueError("first work start is unknown")
-        first_work = min(begun)
         if marker[1] > first_work:
             raise ValueError("setup marker must complete before work starts")
         measurements = result["measurements"]
@@ -194,6 +195,20 @@ def check_job(job, limits, current):
                 result["errors"].append(f"{metric} meets or exceeds its strict limit")
     except ValueError as exc:
         result["errors"].append(str(exc))
+    if result["errors"] or (current and job.get("status") == "in_progress"):
+        # Step names can contain shell commands. Emit only bounded state labels
+        # and timestamp-presence flags, never names, commands, env or raw values.
+        steps = job.get("steps")
+        if isinstance(steps, list):
+            result["step_states"] = [{
+                "number": step.get("number") if positive_int(step.get("number")) else "invalid",
+                "status": step.get("status") if step.get("status") in ("queued", "pending", "in_progress", "completed") else "invalid",
+                "conclusion": step.get("conclusion") if step.get("conclusion") in (
+                    None, "success", "failure", "skipped", "cancelled", "timed_out", "neutral", "action_required", "stale") else "invalid",
+                "has_started_at": step.get("started_at") is not None,
+                "has_completed_at": step.get("completed_at") is not None,
+            } if isinstance(step, dict) else {"record": "invalid"} for step in steps[:100]]
+            result["step_states_omitted"] = max(0, len(steps) - 100)
     return result
 
 
