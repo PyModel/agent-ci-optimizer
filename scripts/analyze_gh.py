@@ -46,6 +46,7 @@ DEFINITIONS = {
     "billable_minutes_by_label": "legacy alias of rounded_runner_minutes_estimate_by_label; ceil(job seconds/60), not an invoice",
     "gap_to_runner_up_s": "observed last two job completion-time gap; not a general upper bound on optimization savings",
     "cancelled_run_runner_seconds": "observed runner time belonging to cancelled runs; potential waste proxy, not proof all work was wasted",
+    "job_phases": "per-job observed phase distributions over all attempts, with first attempts and reruns reported separately; incomplete phase evidence stays unknown",
 }
 LIMITATIONS = [
     "This analyzer is diagnostic and cannot certify the PR feedback budget, required-check completeness or release eligibility.",
@@ -455,6 +456,128 @@ def step_metrics(job: dict) -> dict:
             "missing_step_timings": missing, "per_step": per_step}
 
 
+PHASE_METRICS = ("waiting_s", "setup_s", "running_s", "unattributed_s", "overlap_s", "runner_s")
+PHASE_CLASSIFICATION = (
+    "Step-name heuristic, not command instrumentation: existing SETUP_STEP names "
+    "include checkout, installs, caches and lifecycle/post steps; other named steps "
+    "are running. Waiting excludes dependency/approval delay before job creation. "
+    "Unattributed time is runner wall time outside all observed step intervals."
+)
+
+
+def phase_observation(run: dict, job: dict) -> dict:
+    """Keep incomplete observations out of complete phase latency distributions."""
+    result = {key: None for key in PHASE_METRICS}
+    number, latest = attempt_number(job), attempt_number(run)
+    outcome = job.get("conclusion")
+    result.update(attempt=number, outcome=outcome if isinstance(outcome, str) and outcome else UNKNOWN,
+                  gaps=[], phase_state=UNKNOWN)
+    gaps = result["gaps"]
+    if number is None or latest is None or number > latest:
+        gaps.append("missing or inconsistent attempt identity")
+    name = job.get("logical_job_id") or job.get("name")
+    if not isinstance(name, str) or not name.strip():
+        gaps.append("job identity absent or malformed")
+    if job.get("status") != "completed" or outcome not in ("success", "failure"):
+        gaps.append("job is not a completed success/failure observation")
+    if gaps:
+        return result
+    created, start, end = (ts(job.get(key)) for key in ("created_at", "started_at", "completed_at"))
+    if start is None or end is None or end < start:
+        gaps.append("missing or invalid runner interval")
+        return result
+    result["runner_s"] = (end - start).total_seconds()
+    if created is None or created > start:
+        gaps.append("missing or invalid waiting interval")
+    else:
+        result["waiting_s"] = (start - created).total_seconds()
+    steps = job.get("steps")
+    if not isinstance(steps, list) or not steps:
+        gaps.append("step inventory absent or empty")
+        return result
+    setup, running = [], []
+    step_gaps = []
+    for step in steps:
+        if not isinstance(step, dict):
+            step_gaps.append("malformed step record")
+            continue
+        name = step.get("name")
+        left, right = ts(step.get("started_at")), ts(step.get("completed_at"))
+        if not isinstance(name, str) or not name.strip():
+            step_gaps.append("step name absent or malformed")
+        elif step.get("status") != "completed" or step.get("conclusion") not in ("success", "failure"):
+            step_gaps.append("step is not a completed success/failure observation")
+        elif outcome == "success" and step.get("conclusion") == "failure":
+            step_gaps.append("successful job contains a failed step")
+        elif left is None or right is None or not start <= left <= right <= end:
+            step_gaps.append("step timing missing, invalid or outside runner interval")
+        else:
+            (setup if SETUP_STEP.match(name) else running).append((left, right))
+    if step_gaps:
+        gaps.extend(sorted(set(step_gaps)))
+        return result
+    setup_s, running_s = union_seconds(setup), union_seconds(running)
+    covered_s = union_seconds(setup + running)
+    result.update(setup_s=setup_s, running_s=running_s,
+                  overlap_s=max(0.0, setup_s + running_s - covered_s),
+                  unattributed_s=max(0.0, result["runner_s"] - covered_s))
+    if not gaps:
+        result["phase_state"] = "complete"
+    return result
+
+
+def phase_summary(observations: list[dict]) -> dict:
+    """Count exclusions alongside every distribution; zero observations is unknown."""
+    count = len(observations)
+    complete = sum(row["phase_state"] == "complete" for row in observations)
+    return {"observations": count, "complete_phase_observations": complete,
+            "unknown_phase_observations": count - complete,
+            "outcomes": dict(sorted(Counter(row["outcome"] for row in observations).items())),
+            "attempts": dict(sorted(Counter(str(row["attempt"]) if row["attempt"] is not None else UNKNOWN
+                                            for row in observations).items())),
+            **{key: dist([row[key] for row in observations]) for key in PHASE_METRICS},
+            "unknown_by_metric": {key: sum(row[key] is None for row in observations) for key in PHASE_METRICS},
+            "gaps": dict(sorted(Counter(gap for row in observations for gap in row["gaps"]).items()))}
+
+
+def job_phase_metrics(runs: list[dict], jobs_by_run: dict[int, list[dict]]) -> dict:
+    """Retain failed first attempts instead of replacing them with successful reruns."""
+    by_job = defaultdict(list)
+    for run in runs:
+        # API pages may repeat identical records. Count each distinct payload once
+        # within its run; conflicting same-ID records are unusable evidence, and
+        # unlike effective_jobs(), older attempts are never discarded.
+        seen = set()
+        records = jobs_by_run.get(run["id"], [])
+        id_records = defaultdict(set)
+        for job in records:
+            payload = json.dumps(job, sort_keys=True)
+            if job.get("id") is not None:
+                id_records[str(job["id"])].add(payload)
+        for job in records:
+            payload = json.dumps(job, sort_keys=True)
+            if payload in seen:
+                continue
+            seen.add(payload)
+            observation = phase_observation(run, job)
+            if job.get("id") is not None and len(id_records[str(job["id"])]) > 1:
+                observation.update({key: None for key in PHASE_METRICS})
+                observation["phase_state"] = UNKNOWN
+                observation["gaps"].append("conflicting records for one job ID")
+            by_job[job_identity(job)].append(observation)
+    result = {}
+    for name, observations in sorted(by_job.items()):
+        result[name] = {**phase_summary(observations), "classification": PHASE_CLASSIFICATION,
+                        "identity_basis": "logical_job_id when supplied, otherwise job name; exact duplicates removed within each run; conflicting same-ID payloads count as separate invalid observations",
+                        "decomposition": "runner_s = setup_s + running_s - overlap_s + unattributed_s for each complete observation; percentiles are not additive",
+                        "first_attempt": phase_summary([row for row in observations if row["attempt"] == 1]),
+                        "reruns": phase_summary([row for row in observations if row["attempt"] is not None and row["attempt"] > 1]),
+                        "unknown_attempt": phase_summary([row for row in observations if row["attempt"] is None]),
+                        "by_outcome": {outcome: phase_summary([row for row in observations if row["outcome"] == outcome])
+                                       for outcome in sorted({row["outcome"] for row in observations})}}
+    return result
+
+
 def analyze_group(runs: list[dict], jobs_by_run: dict[int, list[dict]], required: set[str] | None = None) -> dict:
     metrics = {key: [] for key in ("job_queue_s", "setup_work_share", "step_work_s", "step_wall_coverage_s",
                                   "setup_wall_coverage_s", "setup_wall_share", "execution_excluding_setup_coverage_s")}
@@ -507,6 +630,7 @@ def analyze_group(runs: list[dict], jobs_by_run: dict[int, list[dict]], required
                                                "match_basis": "context name only"} for name, count in slowest.most_common()} or UNKNOWN,
               "gap_to_runner_up_s": dist(gaps), "job_duration_s": {name: dist(v) for name, v in sorted(durations.items())},
               "step_duration_s": {name: dist(v) for name, v in sorted(per_step.items())},
+              "job_phases": job_phase_metrics(runs, jobs_by_run),
               "jobs_missing_for_runs": sum(r["id"] not in jobs_by_run for r in runs),
               "missing_step_timings": missing_steps, "identity_gaps": identity_gaps}
     result["setup_share"] = result["setup_work_share"]
