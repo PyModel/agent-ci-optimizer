@@ -30,7 +30,7 @@ bounds; it does not retrieve or cryptographically verify attestations. See
 
 ## Baseline procedure
 
-1. `collect_gh.py --limit 150` (filter `--event pull_request --target-branch main` for PRs, `--event push --branch main` for main). Add `--include-incomplete` to retain waiting/running states. Split capped date windows explicitly; partial evidence stays partial.
+1. `collect_gh.py --limit 150 --include-incomplete --retries 0` (filter `--event pull_request --target-branch main` for PRs, `--event push --branch main` for main). Add `--include-incomplete` to retain waiting/running states. Split capped date windows explicitly; partial evidence stays partial.
 2. `analyze_gh.py`, then inspect job/step distributions, interval-union setup, shard skew, actual attempt history and cohort results. `last_finishing_job` and the runner-up gap are investigative leads; name-only required matches are explicitly weak.
 3. Resolve YAML/matrices/reusable definitions into `ci-job-graph/1`; pass `--graph` for longest-required-path and counterfactual analysis. Write the evidence and assumptions in `critical-path.md`.
 4. Note the window, sample sizes and counts of failed, cancelled, skipped, waiting and unfinished observations. Do not hide slow failures by reporting only successful duration statistics.
@@ -92,10 +92,9 @@ For a change measured on real CI rather than with `benchmark.py`:
 
 Use the [PR feedback budget](08-validation-architecture.md#pr-feedback-budget) when
 designing the four-category pipeline. Record target and observations separately;
-the proposed 300-second objective covers latest-revision end-to-end PR feedback,
+the strict p50 <120-second / p95 <180-second objectives cover latest-revision end-to-end PR feedback,
 not just test execution. Keep first-push journey, completed-run breaches, failed or
-unfinished observations and sample uncertainty visible. A breach opens an agent
-investigation or optimization proposal; no runtime limit may certify unfinished work.
+unfinished observations and sample uncertainty visible. Enforced stage/job budget breaches fail and open an investigation; no runtime limit may certify unfinished work.
 For redistribution, also track full-suite lag, last eligible green age, queue depth,
 starvation and total runner time across all categories. Preserve accepted protection
 when the budget cannot yet be met.
@@ -116,3 +115,14 @@ timezone-aware timestamps. Legacy freshness remains unverified. Prefer the curre
 manifest/attempt schema in [evidence formats](11-evidence-formats.md), preserving
 the provider's identity distinctions. `updated_at` alone is not proof of green or
 check completion; missing attempt and policy evidence remains unknown.
+
+## Strict contract boundaries
+
+`evaluate_validation.py` evaluates supplied legacy policy assertions. It does not
+verify provider queue configuration/admission, merge_group execution, full test
+inventory or fresh test execution. Its scalar feedback threshold accepts equality
+and has no p50 test, so it does not certify the strict p50 <120 s / p95 <180 s
+contract. A result called pass is limited to those assertions; use explicit stage
+budgets and separately reviewed provider/percentile evidence for the strict policy.
+
+Planned repeated trials retain every outcome; never rerun a failed check to replace red.

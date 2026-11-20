@@ -1,7 +1,7 @@
 {
   "schema": "ci-validation-policy/1",
   "repository": "example/project",
-  "feedback_budget_s": 300,
+  "feedback_budget_s": 180,
   "minimum_pr_samples": 20,
   "max_evidence_age_s": 120,
   "categories": {
@@ -27,10 +27,10 @@
     ]
   },
   "integration": {
-    "mode": "rolling",
+    "mode": "merge_queue",
     "max_green_age_s": 3600,
     "max_running_age_s": 1800,
-    "max_unverified_commits": 10
+    "max_unverified_commits": 0
   },
   "rollout": {
     "enabled": true,

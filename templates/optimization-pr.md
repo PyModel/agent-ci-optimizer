@@ -12,12 +12,12 @@
 |---|---|---|---|
 | Code rules | | | |
 | Change correctness | relevant tests; high-risk/unknown FULL fallback | | |
-| Integrated main | full required suite | queue candidate / accepted post-push rolling | |
+| Integrated main | full required suite | combined queue candidate before main | |
 | Release readiness | exact artifact and compatibility/rollout checks | | |
 
-Integration policy: <queue/train / accepted rolling / existing full updated-branch gate>. Policy owner/authorization: <link>. If rolling: <accepted broken-main risk; selection/coalescing, cancellation, progress guarantee, backpressure, green age/head-distance and failure policy>.
+Integration policy: required full-suite merge queue/train before main. Active provider rule and workflow evidence: <links>. Queue selection/cache bypass and unique concurrency group: <proof>. Post-push verification does not substitute.
 
-PR objective: <metric and chosen p95 seconds>. Proposed default 300 seconds, if used, is a configurable target; observed baseline is <value / unknown>. Budget overruns do not skip work or turn timeouts green.
+PR objective: latest-revision p50 <120 s / p95 <180 s. Observed baseline: <value / unknown>. Per-job wait <10 s, setup <30 s, lint/types <5 s and test work <60 s; local hook <9 s. At-limit or exceeded budgets fail; unfinished work never turns green.
 
 ## Evidence
 
@@ -48,7 +48,10 @@ Identity record: <PR/base/queue-candidate/final-main/build SHAs and verified map
 - [ ] Isolation changes: ≥3 shuffled seeds green
 - [ ] Unexpected skip/cancellation/timeout/missing report or shard cannot satisfy a required gate
 - [ ] Wrong/stale revision, artifact or policy evidence cannot grant release eligibility
-- [ ] Rolling validation, if applicable, makes bounded progress under sustained pushes; stale green blocks promotion
+- [ ] Full merge-queue suite executes without affected filters/test-result cache reads; main cannot bypass it
+- [ ] No new retries, wider timeouts, quarantine or skipped tests; initial failures remain visible
+- [ ] New tool missing-rule/file/diagnostic ledger is empty or specific required fallbacks remain
+- [ ] Installed pre-push hook and actual budget failures verified where changed
 
 ## Release readiness impact
 
@@ -63,3 +66,24 @@ Identity record: <PR/base/queue-candidate/final-main/build SHAs and verified map
 ## Rollback
 
 Revert this PR and restore the previous gate/selection policy. Thresholds: <agreed feedback/full-green/flake limits and sample window>. Reject any false green, coverage gap, wrong artifact eligibility or validation starvation immediately. Repair/revalidate affected evidence; do not promote an artifact based on a superseded policy.
+
+## Tool and budget evidence
+
+| Old tool/check | Candidate | Before/after run links | Diagnostics/rules/files missing | Retained fallback / reason |
+|---|---|---|---|---|
+| | | | | |
+
+Per-job wait/setup/work p50/p95 and sample counts: <table>. Exact-cache hits:
+<numerator / eligible restores, misses and unknowns>. Hidden-change negative control:
+<real source diff, selected/full exits, guard result>. Budget negative control:
+<command/phase at limit remains nonzero>.
+
+## One activation and cost list
+
+| Account/app/secret/admin/spend blocker | Prepared change | Expected monthly cost | Rate, volume, allowance and uncertainty |
+|---|---|---|---|
+| none / specific item | | | |
+
+Final before/after: PR p50/p95 <values and n>; total runner seconds/minutes <values>;
+monthly compute/storage <actual / estimate / unknown>. Include queue and trusted-main
+cache runs. Never price the critical-path wall time as if it were all runner work.

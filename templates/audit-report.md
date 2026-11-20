@@ -23,18 +23,18 @@ Use the [validation architecture](../references/08-validation-architecture.md). 
 
 | Category | Verified commands / unique failure modes | Trigger and exact revision | Gate / required completion boundary | Coverage / evidence gaps |
 |---|---|---|---|---|
-| 1. Code rules | | | authoritative CI; hooks optional | |
+| 1. Code rules | | | authoritative CI; installed fast pre-push hook | |
 | 2. Change correctness | relevant tests; FULL conditions | | PR acceptance | |
-| 3. Integrated main | full required suite | queue candidate / immutable main SHA | integration policy; before release eligibility | |
+| 3. Integrated main | full required suite | combined queue candidate | full suite before main admission | |
 | 4. Release readiness | artifact, compatibility and rollout checks | immutable artifact digest | release / promotion | |
 
-Main policy: <merge queue/train / explicitly accepted post-push rolling CI / existing full updated-branch policy>. Owner and policy evidence: <link>. Post-push residual risk: <broken-main window, detection/repair ownership, acceptance; or not applicable>.
+Main policy: full suite in the required merge queue/train before main. Provider rule and workflow evidence: <links / activation blocked>. Post-push/nightly runs are supplemental.
 
-Rolling controls, if applicable: <candidate/coalescing rule; cancellation; progress guarantee; backpressure; max green age and head distance; failure action>. Unknown/high-risk selection fallback: <FULL before integration>. Each obligation moved later: <old boundary → new boundary, retained gate, approved risk change>.
+Queue controls: <full inventory, no test-result cache replay, unique concurrency group, all entries pass>. PR-only selection fallback: <FULL>. Every obligation remains before main; list any activation blocker.
 
 ## PR feedback objective
 
-Chosen objective: <latest-revision p95 / first-push journey p95 / both> ≤ <seconds>. A proposed default of **300 seconds** is a configurable target, never a measured baseline or a timeout. Budget overruns trigger investigation; they never authorize omitted or weakened checks.
+Chosen objective: latest-revision **p50 <120 s / p95 <180 s**. Report first-push journey separately. Require wait <10 s, setup <30 s, lint/types <5 s, tests <60 s/shard and local hook <9 s. Enforced at-limit/over-budget work fails. Targets are never measured baselines.
 
 | Metric | p50 | p95 | n / window | Start → finish / limitations |
 |---|---|---|---|---|
@@ -56,7 +56,10 @@ history: <counts and effect>. Normalized dependency graph: <source/expansion pro
 |---|---|---|---|---|
 | analyzer push→green proxy | | | | approximation, not a substitute for the PR objective above |
 | slowest workflow wall | | | | |
-| job queue | | | | |
+| each job: waiting | | | | created → started; separate dependency wait |
+| each job: setup | | | | explicit phase markers; missing evidence unknown |
+| each job: running | | | | preserve work inventory and outcomes |
+| each job: teardown/unattributed | | | | do not add overlapping percentiles |
 | setup share | | | | |
 | shard skew | | | | |
 | suspected same-run retry recovery | | | | logs distinguish flakiness, repair and intentional reruns |

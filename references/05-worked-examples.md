@@ -34,7 +34,7 @@ Illustrative shapes, not measurements. Numbers here show the reasoning; never co
 
 **Observed:** coding agents push every few minutes; 60% of runs cancelled or superseded; flake rate 8% on e2e.
 
-**Plan:** `cancel-in-progress` on PR refs; pre-push hook running the exact CI lint/type commands (module 7) so agents see red locally; quarantine list for known flaky e2e **with an owner and expiry**, tracked in `flake-audit.md`, never silent skips; e2e moved to `merge_group` + nightly if product owners accept the latency trade.
+**Plan:** `cancel-in-progress` on PR refs; pre-push hook running the exact CI lint/type commands (module 7) so agents see red locally; diagnose and fix flaky e2e from first-failure evidence, with no retries or quarantine; retain the full suite on `merge_group` before main and use nightly runs only as additional evidence.
 
 ## E. "Build once, share the artifact" that made CI slower
 
