@@ -9,9 +9,10 @@ false green as worse than a slow build.
 
 Before tuning runners, it designs four validation categories from the repository's
 actual commands and policy: **code rules**, **change correctness**, **integrated main**,
-and **release readiness**. It proposes a configurable five-minute PR feedback budget,
-selects tests only with dependency evidence and a FULL fallback, compares merge-queue
-and rolling-main verification, and ties releases to verified commits and artifacts.
+and **release readiness**. Its default targets are PR p50 <120 seconds and p95 <180
+seconds. The full suite runs in a merge queue before main; selection narrows PR
+feedback only. It rejects retries, skipped tests and weaker checks as optimizations,
+and ties releases to verified commits and artifacts.
 For services it evaluates feature gates and progressive rollouts; for libraries and
 other products it uses the appropriate compatibility, packaging and staging gates.
 Detection produces evidence for agent review, not permission to remove checks.
@@ -19,6 +20,8 @@ Detection produces evidence for agent review, not permission to remove checks.
 ## Contents
 
 - [SKILL.md](SKILL.md): the procedure agents follow.
+- [Strict performance contract](references/14-two-minute-ci.md): exact budgets, full queue execution, honest measurements, activation blockers and cost.
+- [Current toolchain migration](references/15-toolchain-migration.md): Bun, Oxlint, Oxfmt, TypeScript 7, tsrs and Vitest parity requirements.
 - [references/](references/): discovery matrix, playbook, safety rules, measurement, examples, dated sources, config recipes and [four-category validation architecture](references/08-validation-architecture.md).
 - [templates/](templates/): audit report, optimization PR, paste-ready brief for agents without the skill.
 - [scripts/](scripts/): Python 3.10+ stdlib tools.

@@ -1,6 +1,6 @@
 # Audit field guide
 
-Load when conducting an audit or preparing a scoped optimization PR.
+Load when conducting an audit or preparing a scoped optimization PR. Apply the [strict contract](14-two-minute-ci.md) first; old policy formats remain diagnostic compatibility only.
 
 ## Entry checklist (before any change)
 
@@ -11,10 +11,10 @@ Script paths below are relative to this skill's directory; from the target repo,
 3. Identify CI provider(s), runner trust domains, workflows and job `needs`, languages, lockfiles, monorepo graph, test runners, coverage gates, deployment paths, and secret **names and permission scopes only**.
 4. Identify permission boundaries: fork PR vs trusted branch vs merge queue vs release. GitHub collection needs authenticated `gh` with read access to Actions; benchmarking never justifies write scope.
 5. Collect up to 150 recent runs into an immutable, hashed snapshot (failed runs included, kept distinguishable):
-   `python3 scripts/collect_gh.py --repo OWNER/REPO --limit 150 --out REPO/.ci-audit`
+   `python3 scripts/collect_gh.py --repo OWNER/REPO --limit 150 --include-incomplete --retries 0 --out REPO/.ci-audit`
    Add `--event pull_request --target-branch main`, or `--event push --branch main`, to separate loops. `--branch` filters history, not protected-policy scope. Use `--include-incomplete` to retain waiting/running observations, `--created`/`--workflow` for server filters, and `--incremental` for authenticated ETag revalidation. Exit 3 means explicit evidence gaps; inspect completeness, never reuse a failed payload. For GitLab native data and other evidence tools, see [measured adapters](13-measured-adapters.md).
 6. Analyze: `python3 scripts/analyze_gh.py --input REPO/.ci-audit --output REPO/.ci-audit/metrics.json`. It separates attempts, successful latency proxies, queue, overlap-aware setup, step distributions, recovery, partial reruns, runner seconds, estimated rounded minutes and uncertainty. Add `--graph`, `--cohort-context` and dated `--pricing` only with reviewed evidence. `--since` filters the entire run/job/attempt population; keep configuration eras separate.
-   Inspect freshness, completeness, sample sizes and unresolved identities. These are diagnostic proxies. For PR budgets, full-suite freshness and exact artifact eligibility, use `evaluate_validation.py` with a reviewed policy and provider-normalized evidence; it does not authenticate sources or verify signatures. Missing/contradictory evidence cannot pass. See [evidence formats](11-evidence-formats.md).
+   Inspect freshness, completeness, sample sizes and unresolved identities. These are diagnostic proxies. For PR budgets, full-suite freshness and exact artifact eligibility, use `evaluate_validation.py` with a reviewed policy and provider-normalized evidence; it does not authenticate sources, verify signatures or enforce the strict median/tail/queue contract; its legacy scalar budget accepts equality. Missing/contradictory evidence cannot pass. See [evidence formats](11-evidence-formats.md).
 7. Establish p50/p95 for push→green, workflow wall, queue, setup, lint, typecheck, tests, cache hit/miss, flaky retries, runner spend, cost per merge, and tail outliers. Missing or inapplicable metrics are **unknown**, never zero.
 8. Read the [safety policy](03-security-correctness.md), [platform semantics](09-platform-updates.md) and relevant [stack adapters](10-stack-adapters.md). `inspect_workflows.py` accepts pinned-YAML-1.2-normalized JSON; expressions/reusable expansion and runtime identities remain unknown until resolved. Build the dependency DAG and name the slowest required path.
 
@@ -28,7 +28,7 @@ Script paths below are relative to this skill's directory; from the target repo,
 
 1. Complete the four-category current/proposed map and policy decision, then reconstruct the DAG; separate queue, setup, steps and critical path. GitHub's jobs API gives timings; the `needs` edges come from YAML. Preserve existing gates while unknowns are resolved.
 2. Fill the seven-module table: `applicable`, `observed bottleneck`, `Δ wall-clock` (on path or below floor), `Δ runner-minutes`, `evidence tier`, `correctness/security risk`, `effort`, `cost delta`, `next proof`.
-3. Order by **risk-adjusted saving on the required path**: reversible setup/cache fixes before runner or provider changes. [Measurement guide](04-measurement-benchmarking.md).
+3. Order by **measured saving in the biggest bucket on the required path**, with correctness first; do not impose a tool-migration order before measurement. [Measurement guide](04-measurement-benchmarking.md).
 4. Run the [pre-publish review](03-security-correctness.md#before-publishing-a-report), then deliver the report and proposed sequence. If scoped implementation is already authorized, continue; otherwise stop before the unapproved action.
 
 ### B. Benchmark one change
@@ -51,9 +51,9 @@ Script paths below are relative to this skill's directory; from the target repo,
 
 ### D. Monitor, adapt, roll back
 
-Track p50/p95 push→green, queue/setup breakdown, p95 critical path, cache efficiency, reruns, skipped-vs-full selection, cost per merged PR, false greens, escaped defects and release provenance. Re-assess after each change: bottlenecks move. When another job becomes the gate, report the new gate, not the old job's gain as wait removed. Investigation triggers (not universal gates): queue p95 >60 s, setup >25% of the critical job, slowest shard >1.5× median, flake >5%, p95 >2× target. Rollback triggers: [measurement guide](04-measurement-benchmarking.md#monitoring-and-rollback).
+Track p50/p95 push→green, queue/setup breakdown, p95 critical path, cache efficiency, reruns, skipped-vs-full selection, cost per merged PR, false greens, escaped defects and release provenance. Re-assess after each change: bottlenecks move. When another job becomes the gate, report the new gate, not the old job's gain as wait removed. Enforce waiting <10 s, setup <30 s, lint/typecheck <5 s and test work <60 s per shard. Investigate any retry, false green or threshold breach; report rolling PR p50/p95 separately. Rollback triggers: [measurement guide](04-measurement-benchmarking.md#monitoring-and-rollback).
 
-Check the agreed PR budget and category-3 completion/freshness independently. Coalescing main runs must not cancel every full suite forever. A failed full run blocks eligibility for that commit; follow the repo's fix-forward/revert policy and incident owner. Missing rollout telemetry pauses promotion.
+Check the agreed PR budget and category-3 completion/freshness independently. Give full pre-main queue runs unique concurrency groups; post-push coalescing cannot replace them. A failed full run blocks eligibility for that commit; follow the repo's fix-forward/revert policy and incident owner. Missing rollout telemetry pauses promotion.
 
 ## Mandatory output contract
 

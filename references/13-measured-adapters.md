@@ -113,3 +113,24 @@ Provider fixtures cover the contracts of the new collectors; they are not live
 provider verification runs. Native JUnit parsing, OpenTelemetry import/export,
 calibration against real runner/host pressure and total ownership data, live
 signature verification, and measured agent behavior remain separate work.
+
+## Strict budget helpers
+
+`run_budget.py --seconds 60 --label tests -- COMMAND` executes one argv with a
+monotonic exclusive time bound, no retries, preserved failures and bounded POSIX
+process-group cleanup. Its Windows fallback controls only the direct child. It
+measures one command, not queue/setup or p50/p95.
+
+`check_job_budgets.py --jobs FILE --policy FILE --attempt 1 --run-id ID
+--head-sha SHA [--current-job NAME]` verifies complete GitHub job pages against an
+exact job/step policy and expected run/head identity. Its `ci-job-budgets/1` policy
+has exact job names, waiting_s/setup_s/running_s/runner_s limits, the last setup
+step name and an explicit work-step inventory. Unknown or replayed evidence fails.
+Input reads are bounded. This offline verifier does not authenticate caller data.
+
+Bind SHA to the API workflow/job head_sha; for PR events that may differ from the
+checkout merge SHA. Obtain fresh provider data with read-only permissions. The
+explicit current verifier job may report pass_with_pending: only its observed
+waiting/setup pass, while its future running/runner duration remains pending.
+Guard its command and audit its completed duration later. Never call that a fully
+completed workflow-budget certificate or a provider queue-rule verification.
