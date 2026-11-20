@@ -147,19 +147,15 @@ def check_job(job, limits, current):
             if not {"status", "conclusion", "started_at", "completed_at"} <= step.keys():
                 raise ValueError("step state or timing evidence is missing")
             state, conclusion = step.get("status"), step.get("conclusion")
-            if state == "queued" and live:
+            if state in ("queued", "pending") and live:
                 if any(step.get(key) is not None for key in ("started_at", "completed_at", "conclusion")):
                     raise ValueError("queued step has contradictory timing or conclusion")
                 by_name[step["name"]] = (None, None, state)
                 unfinished = True
                 continue
-            # A live API snapshot need not settle each earlier step's status
-            # before reporting a later step. Do not infer completion from that
-            # overlap: only the explicit setup marker/first work timestamps are
-            # certified below, and live running/runner limits stay pending.
-            if unfinished and not live:
+            if unfinished:
                 raise ValueError("a step executed after an unfinished step")
-            if state not in {"completed", "in_progress"} or (state == "in_progress" and not live):
+            if state not in ("completed", "in_progress") or (state == "in_progress" and not live):
                 raise ValueError("step has missing or unexpected execution state")
             if (state == "completed" and conclusion != "success") or (state == "in_progress" and conclusion is not None):
                 raise ValueError("non-success or contradictory step conclusion")
@@ -199,13 +195,14 @@ def check_job(job, limits, current):
                 result["errors"].append(f"{metric} meets or exceeds its strict limit")
     except ValueError as exc:
         result["errors"].append(str(exc))
+    if result["errors"] or (current and job.get("status") == "in_progress"):
         # Step names can contain shell commands. Emit only bounded state labels
         # and timestamp-presence flags, never names, commands, env or raw values.
         steps = job.get("steps")
         if isinstance(steps, list):
             result["step_states"] = [{
                 "number": step.get("number") if positive_int(step.get("number")) else "invalid",
-                "status": step.get("status") if step.get("status") in ("queued", "in_progress", "completed") else "invalid",
+                "status": step.get("status") if step.get("status") in ("queued", "pending", "in_progress", "completed") else "invalid",
                 "conclusion": step.get("conclusion") if step.get("conclusion") in (
                     None, "success", "failure", "skipped", "cancelled", "timed_out", "neutral", "action_required", "stale") else "invalid",
                 "has_started_at": step.get("started_at") is not None,

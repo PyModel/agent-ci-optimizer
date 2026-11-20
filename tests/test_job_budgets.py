@@ -191,35 +191,52 @@ class JobBudgetTest(unittest.TestCase):
         rule["jobs"]["ci"]["waiting_s"] = 2
         self.assert_failure(payload(data), rule, current_job="ci")
 
-    def test_live_tail_allows_lagging_status_without_certifying_runtime(self):
-        for state in ("completed", "in_progress"):
-            with self.subTest(later_state=state):
+    def test_live_pending_steps_are_unstarted_not_successful_work(self):
+        for state in ("queued", "pending"):
+            with self.subTest(state=state):
                 data = job("ci")
                 data.update(status="in_progress", conclusion=None, completed_at=None)
                 data["steps"][2].update(status="in_progress", conclusion=None, completed_at=None)
-                if state == "in_progress":
-                    data["steps"][3].update(status=state, conclusion=None, completed_at=None)
+                for tail in data["steps"][3:]:
+                    tail.update(status=state, conclusion=None, started_at=None, completed_at=None)
                 result = budgets.verify(payload(data), policy("ci"), current_job="ci",
                                         expected_run_id=99, expected_head_sha="a" * 40)
                 self.assertEqual(result["status"], "pass_with_pending")
                 self.assertEqual(result["jobs"][0]["measurements"], {
                     "waiting_s": 2, "setup_s": 4, "running_s": "pending", "runner_s": "pending"})
+                self.assertEqual(result["jobs"][0]["step_states"][-1]["status"], state)
                 self.assertTrue(result["identity_bound"])
 
-    def test_live_tail_queued_non_work_step_may_lag_later_execution(self):
-        data = job("ci")
-        data.update(status="in_progress", conclusion=None, completed_at=None)
-        data["steps"][4].update(status="queued", conclusion=None, started_at=None, completed_at=None)
-        data["steps"].append(step(6, "Finish accounting", 19, 20))
-        result = budgets.verify(payload(data), policy("ci"), current_job="ci")
-        self.assertEqual(result["status"], "pass_with_pending")
+    def test_live_unstarted_step_cannot_have_timing_or_conclusion(self):
+        for key, value in (("started_at", stamp(12)), ("completed_at", stamp(13)),
+                           ("conclusion", "success"), ("conclusion", "failure")):
+            data = job("ci")
+            data.update(status="in_progress", conclusion=None, completed_at=None)
+            data["steps"][4].update(status="pending", conclusion=None, started_at=None, completed_at=None)
+            data["steps"][4][key] = value
+            self.assert_failure(payload(data), policy("ci"), current_job="ci")
+
+    def test_live_later_execution_after_unfinished_work_is_not_invented(self):
+        for state in ("pending", "queued", "in_progress"):
+            data = job("ci")
+            data.update(status="in_progress", conclusion=None, completed_at=None)
+            data["steps"][2].update(status=state, conclusion=None, completed_at=None)
+            if state != "in_progress":
+                data["steps"][2]["started_at"] = None
+            self.assert_failure(payload(data), policy("ci"), current_job="ci")
+
+    def test_malformed_status_values_fail_without_type_error(self):
+        for value in ({}, [], True, 12):
+            data = job("ci")
+            data["steps"][2]["status"] = value
+            self.assert_failure(payload(data), policy("ci"), current_job="ci")
 
     def test_current_job_cannot_borrow_later_work_start_for_queued_first_work(self):
         data = job("ci")
         data.update(status="in_progress", conclusion=None, completed_at=None)
         data["steps"][2].update(status="queued", conclusion=None, started_at=None, completed_at=None)
         result = self.assert_failure(payload(data), policy("ci"), current_job="ci")
-        self.assertIn("first work start is unknown", result["jobs"][0]["errors"])
+        self.assertTrue(result["jobs"][0]["errors"])
 
     def test_live_tail_still_rejects_every_observed_non_success(self):
         for conclusion in ("failure", "skipped", "cancelled", "timed_out", "neutral"):
@@ -231,10 +248,10 @@ class JobBudgetTest(unittest.TestCase):
                 self.assert_failure(payload(data), policy("ci"), current_job="ci")
 
     def test_settled_jobs_do_not_accept_a_live_step_tail(self):
-        for state in ("queued", "in_progress"):
+        for state in ("queued", "pending", "in_progress"):
             data = job("ci")
             data["steps"][2].update(status=state, conclusion=None, completed_at=None)
-            if state == "queued":
+            if state in ("queued", "pending"):
                 data["steps"][2]["started_at"] = None
             self.assert_failure(payload(data), policy("ci"), current_job="ci")
 
