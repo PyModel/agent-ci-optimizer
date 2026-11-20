@@ -11,6 +11,7 @@ import re
 from pathlib import Path
 
 MAX_BYTES = 16 * 1024 * 1024
+MIN_TAIL_RUNS = 40  # Same conservative warning policy as benchmark.py, not a significance test.
 NOTICE = ("Protection and security/merge eligibility are NOT ASSESSED. "
           "This manual timing audit is not a required check or a readiness certificate.")
 PHASES = ("waiting_s", "setup_s", "running_s", "unattributed_s", "overlap_s", "runner_s")
@@ -22,6 +23,10 @@ def numeric(value: object) -> int | float | str:
     if isinstance(value, (int, float)) and not isinstance(value, bool) and 0 <= value <= 2 ** 53 and math.isfinite(value):
         return value
     return "unknown"
+
+
+def count(value: object) -> int | str:
+    return value if type(value) is int and 0 <= value <= 2 ** 53 else "unknown"
 
 
 def counts(value: dict) -> dict:
@@ -36,7 +41,10 @@ def counts(value: dict) -> dict:
 def distribution(value: object) -> dict | str:
     if not isinstance(value, dict):
         return "unknown"
-    return {**{key: numeric(value.get(key)) for key in ("n", "p50", "p95", "mean", "max", "p95_tail_observations")},
+    n = count(value.get("n"))
+    return {**{key: numeric(value.get(key)) for key in ("p50", "p95", "mean", "max")},
+            "n": n, "p95_tail_observations": count(value.get("p95_tail_observations")),
+            "p95_preliminary": n == "unknown" or n < MIN_TAIL_RUNS,
             "method": "nearest-rank", "low_sample": value.get("low_sample") is True,
             "heavy_tail": value.get("heavy_tail") is True}
 
@@ -118,9 +126,18 @@ def number(value: object) -> str:
 
 def pair(row: dict, key: str) -> str:
     distribution = row.get(key)
-    if not isinstance(distribution, dict):
-        return "unknown / unknown"
-    return f"{number(distribution.get('p50'))} / {number(distribution.get('p95'))}"
+    distribution = distribution if isinstance(distribution, dict) else {}
+    n = count(distribution.get("n"))
+    missing = count(row.get("unknown_by_metric", {}).get(key))
+    values = (f"{number(distribution.get('p50'))} / {number(distribution.get('p95'))}"
+              if n != "unknown" and n > 0 else "unknown / unknown")
+    preliminary = "; p95 preliminary" if n == "unknown" or n < MIN_TAIL_RUNS else ""
+    return f"{values} (n={n}; missing={missing}{preliminary})"
+
+
+def outcome_summary(row: dict) -> str:
+    values = counts(row.get("outcomes", {}))
+    return ", ".join(f"{name}: {number(value)}" for name, value in sorted(values.items())) or "unknown"
 
 
 def render(metrics: dict | None, status: str) -> tuple[str, bool]:
@@ -148,13 +165,24 @@ def render(metrics: dict | None, status: str) -> tuple[str, bool]:
               "## Job phases (seconds: p50 / p95)", "",
               "These distributions include observed outcomes and attempts. Setup uses the analyzer's documented step-name heuristic. "
               "Missing or censored timings remain unknown; percentile components are not additive. "
-              "The JSON separates first attempts, reruns and outcomes. Workflow/job labels are bounded; raw step names, branch metadata and unrecognized fields are excluded.", "",
-              "| Workflow | Job | Waiting | Setup | Running | Runner total | Unknown phases |",
-              "| --- | --- | --- | --- | --- | --- | --- |"]
+              "Each metric shows its own observed count (n) and missing count. P95 is preliminary below "
+              f"{MIN_TAIL_RUNS} observations or when n is unknown; reaching that count does not establish significance or budget attainment. "
+              "All-attempt rows retain every observed outcome; first-attempt and rerun rows are distinct populations. "
+              "Workflow/job labels are bounded; raw step names, branch metadata and unrecognized fields are excluded.", "",
+              "| Workflow | Job | Attempt basis | Waiting | Setup | Running | Runner total | Outcomes | Unknown phases |",
+              "| --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
     for workflow, group in metrics.get("workflows", {}).items():
         for name, row in group.get("job_phases", {}).items():
-            lines.append("| " + " | ".join([cell(group.get("name", workflow)), cell(row.get("name", name)), *(pair(row, key) for key in
-                         ("waiting_s", "setup_s", "running_s", "runner_s")), number(row.get("unknown_phase_observations"))]) + " |")
+            populations = [("All observed attempts", row)]
+            for key, label in (("first_attempt", "First attempts"), ("reruns", "Reruns"), ("unknown_attempt", "Unknown attempt")):
+                population = row.get(key, {})
+                observations = count(population.get("observations"))
+                if observations != "unknown" and observations > 0:
+                    populations.append((label, population))
+            for basis, population in populations:
+                lines.append("| " + " | ".join([cell(group.get("name", workflow)), cell(row.get("name", name)), basis,
+                             *(pair(population, key) for key in ("waiting_s", "setup_s", "running_s", "runner_s")),
+                             outcome_summary(population), number(population.get("unknown_phase_observations"))]) + " |")
     lines += ["", "Historical CI cost is unknown without dated provider rates and billing evidence. "
               "Cache hit rates and enforced merge-queue/full-suite policy are not established by this report.", ""]
     return "\n".join(lines), complete
