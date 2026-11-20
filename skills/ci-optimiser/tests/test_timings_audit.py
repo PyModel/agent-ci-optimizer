@@ -185,6 +185,42 @@ class TimingReportTest(unittest.TestCase):
         self.assertFalse(reporter.render(projected, "success")[1])
         self.assertEqual(reporter.number(10 ** 400), "unknown")
 
+    def test_single_observation_discloses_sample_support_and_attempt_basis(self):
+        metrics = reporter.project(self.metrics())
+        report, complete = reporter.render(metrics, "success")
+        self.assertTrue(complete)  # Collection completeness is not percentile certainty.
+        self.assertIn("n=1; missing=0; p95 preliminary", report)
+        self.assertIn("All observed attempts", report)
+        self.assertIn("First attempts", report)
+        self.assertIn("success: 1", report)
+        self.assertIn("does not establish significance or budget attainment", report)
+
+    def test_each_metric_keeps_its_own_population_and_unknown_count(self):
+        metrics = self.metrics()
+        row = next(iter(next(iter(metrics["workflows"].values()))["job_phases"].values()))
+        row["waiting_s"] = analyzer.dist([1, 2, 3])
+        row["unknown_by_metric"]["waiting_s"] = 2
+        row["setup_s"] = "unknown"
+        row["unknown_by_metric"]["setup_s"] = 5
+        row["reruns"] = {"observations": 1, "outcomes": {"failure": 1},
+                         "waiting_s": analyzer.dist([9]), "unknown_by_metric": {"waiting_s": 0}}
+        report, _ = reporter.render(reporter.project(metrics), "success")
+        self.assertIn("2 / 3 (n=3; missing=2; p95 preliminary)", report)
+        self.assertIn("unknown / unknown (n=unknown; missing=5; p95 preliminary)", report)
+        rerun_row = next(line for line in report.splitlines() if "| Reruns |" in line)
+        self.assertIn("9 / 9 (n=1; missing=0; p95 preliminary)", rerun_row)
+        self.assertIn("failure: 1", rerun_row)
+
+    def test_tail_warning_is_conservative_and_zero_or_invalid_n_is_unknown(self):
+        for n, preliminary in ((1, True), (39, True), (40, False), (0, True), (None, True), (1.5, True), (True, True)):
+            with self.subTest(n=n):
+                distribution = reporter.distribution({"n": n, "p50": 5, "p95": 9})
+                self.assertIs(distribution["p95_preliminary"], preliminary)
+                rendered = reporter.pair({"setup_s": distribution, "unknown_by_metric": {}}, "setup_s")
+                self.assertEqual("p95 preliminary" in rendered, preliminary)
+                if type(n) is not int or n == 0:
+                    self.assertTrue(rendered.startswith("unknown / unknown"))
+
 
 if __name__ == "__main__":
     unittest.main()

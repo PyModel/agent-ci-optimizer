@@ -68,6 +68,13 @@ and `runner_class`. These assertions need source evidence. Unknown attributes do
 not support a comparable-workload claim. Coarse workflow summaries remain useful
 for investigation, but do not replace the narrower cohort results.
 
+The timing-only report shows each metric's own observed `n` and missing count,
+with separate all-attempt, first-attempt, rerun and unknown-attempt populations
+when present. P95 is visibly preliminary below 40 observations or when its sample
+count is unknown; reaching 40 is not a significance test or budget certificate.
+Outcome counts remain visible. The published projection excludes raw step commands
+and unrestricted cohort fields; richer summaries must preserve that boundary.
+
 `--pricing` accepts `ci-pricing/1`: `currency`, dated `as_of`, `source`, and a `rates`
 array of `{labels, per_minute, billing_quantum_seconds}`. Match the complete sorted
 runner label set. Estimates exclude plan allowances, storage, transfer and fixed
