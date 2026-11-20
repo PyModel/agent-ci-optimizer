@@ -1,9 +1,9 @@
 # Repository guidance
 
-This repo is one agent skill, `agent-ci-optimizer`: [SKILL.md](SKILL.md), one-hop
+This repo is one agent skill, `ci-optimiser`: [SKILL.md](SKILL.md), one-hop
 [references](references/), [templates](templates/), stdlib [scripts](scripts/) and their [tests](tests/).
 
-- `SKILL.md` stays ≤200 lines and ≤13 KiB; frontmatter is `name: agent-ci-optimizer` and a folded
+- `SKILL.md` stays ≤200 lines and ≤13 KiB; frontmatter is `name: ci-optimiser` and a folded
   `description: >-` starting `Use when `. Detail goes in `references/`.
 - Scripts: Python 3.10+ standard library only, no shell=True, read-only against providers,
   missing data reported as `unknown`, never 0. Every behavior change gets a test in `tests/`.

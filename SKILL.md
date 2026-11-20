@@ -1,5 +1,5 @@
 ---
-name: agent-ci-optimizer
+name: ci-optimiser
 description: >-
   Use when CI is slow, flaky or expensive, agents wait on checks, or someone
   asks for faster runners (Blacksmith, Depot, larger runners), Oxlint, bun
@@ -10,7 +10,7 @@ description: >-
   and CI provider; evidence-first and read-only until authorized.
 ---
 
-# Agent CI Optimizer
+# ci-optimiser
 
 ## Mission
 

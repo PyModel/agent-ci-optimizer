@@ -1,4 +1,4 @@
-# ![Agent CI Optimizer](assets/banner.svg)
+# ![ci-optimiser](assets/banner.svg)
 
 An agent skill that makes CI faster without making it lie. It audits a repo's
 push → trustworthy green → merge loop, measures where the time goes, and proposes one
@@ -36,15 +36,20 @@ Detection produces evidence for agent review, not permission to remove checks.
 
 ## Install
 
-The skill directory name must be `agent-ci-optimizer`. Check each target first with
+For an existing installation, inspect the old `agent-ci-optimizer` symlink and
+confirm that it points to this checkout before removing that symlink. Then use the
+new name below so agents discover one copy of the skill. Keep any real directory
+and its contents until you have migrated it deliberately.
+
+The skill directory name must be `ci-optimiser`. Check each target first with
 `ls -ld <target>`. If an old entry exists, rename or remove it, then link with `ln -sn`:
 
 ```bash
 SKILL_DIR="$PWD"   # this clone
-ln -sn "$SKILL_DIR" ~/.agents/skills/agent-ci-optimizer
-ln -sn ../../.agents/skills/agent-ci-optimizer ~/.claude/skills/agent-ci-optimizer
-ln -sn ~/.agents/skills/agent-ci-optimizer ~/.codex/skills/agent-ci-optimizer
-ln -sn ~/.agents/skills/agent-ci-optimizer ~/.pi/agent/skills/agent-ci-optimizer
+ln -sn "$SKILL_DIR" ~/.agents/skills/ci-optimiser
+ln -sn ../../.agents/skills/ci-optimiser ~/.claude/skills/ci-optimiser
+ln -sn ~/.agents/skills/ci-optimiser ~/.codex/skills/ci-optimiser
+ln -sn ~/.agents/skills/ci-optimiser ~/.pi/agent/skills/ci-optimiser
 ```
 
 A symlink install serves this working tree as-is, so uncommitted edits reach every agent.
