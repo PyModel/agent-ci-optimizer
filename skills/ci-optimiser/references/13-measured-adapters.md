@@ -312,3 +312,48 @@ explicit current verifier job may report pass_with_pending: only its observed
 waiting/setup pass, while its future running/runner duration remains pending.
 Guard its command and audit its completed duration later. Never call that a fully
 completed workflow-budget certificate or a provider queue-rule verification.
+
+### PR approval history
+
+A provider attempt counter can advance when an approval hold is resumed before any
+job has executed. Keep the original counter and receipts. This is an authorization
+resume only when complete evidence proves no earlier job ran; a counter above one
+alone cannot distinguish it from an execution retry. An earlier failed execution
+stays failed and requires a fix on a new revision.
+
+The budget verifier still accepts attempt 1 by default. For an explicitly reviewed
+PR approval boundary, supply `--approval-history FILE` with all of `--repository
+OWNER/REPO`, `--repository-id ID`, `--workflow-ref OWNER/REPO/.github/workflows/ci.yml@REF`,
+and `--pull-request NUMBER`. These expected values must come from trusted GitHub
+workflow context, alongside the existing expected run ID and API head SHA. Never
+read expected identity from the history being checked.
+
+The history has exactly `schema: ci-pr-approval-history/1`, `current_run` (the raw
+current attempt receipt) and `previous_attempts` (ordered `{ "run": ..., "jobs": ... }`
+receipts for every preceding attempt). Fetch the current and prior metadata from
+`actions/runs/RUN/attempts/N`, and each corresponding job inventory from
+`actions/runs/RUN/attempts/N/jobs?per_page=100`. Generic current-run URLs are not
+attempt-specific evidence. The helper requires:
+
+- Current `pull_request` event, bound repository ID/name, run, SHA, workflow path
+  and positive workflow ID, exact PR number/ID and consistent PR head/base identity.
+- Every prior attempt, without gaps or duplicates, has the same identities and
+  `status: completed`, `conclusion: action_required`.
+- Every prior jobs response has integer `total_count: 0` and exactly an empty
+  `jobs` array. Missing, truncated, nonzero or contradictory inventories fail.
+- Current jobs and the optional local setup record keep their actual attempt.
+  All success, completeness and strict timing checks still apply.
+
+Collection must use authenticated, scoped read access in a trusted workflow.
+The offline helper checks supplied structure and identity; it cannot authenticate
+an arbitrary JSON file. The repository collector uses no transport retries or
+cache, retains returned outcomes unchanged, and runs within the existing timing
+budget. The history bound is at most nine prior holds (current attempt 2–10).
+Any exceeded bound or unavailable evidence fails closed.
+
+This exception applies only to PR feedback. Source pushes, merge-queue validation
+and release publication retain their first-attempt requirements. No failure is
+relabelled, no test is retried for acceptance, and no budget is increased. Keep
+provider-attempt statistics separate from evidence of actual previous execution.
+Retain approval waiting in end-to-end PR latency; this exception does not reset
+the feedback clock.

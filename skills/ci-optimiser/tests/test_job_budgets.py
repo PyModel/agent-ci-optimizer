@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from contextlib import redirect_stdout
+import copy
 import io
 import json
 from pathlib import Path
@@ -61,6 +62,203 @@ def local_setup():
     return {"schema": "ci-current-job-setup/1", "job": "ci", "run_id": 99, "head_sha": "a" * 40,
             "run_attempt": 1, "setup_end_step": "Checkout repository", "first_work_step": "Require success",
             "observed_at": stamp(6)}
+
+
+
+def approval_run(attempt, *, status="completed", conclusion="action_required"):
+    base = "https://api.github.com/repos/owner/project/actions/runs/99"
+    return {"id": 99, "run_attempt": attempt, "event": "pull_request", "workflow_id": 70,
+            "path": ".github/workflows/ci.yml", "head_sha": "a" * 40,
+            "repository": {"id": 50, "full_name": "owner/project"},
+            "head_repository": {"id": 50, "full_name": "owner/project"},
+            "url": base, "jobs_url": base + f"/attempts/{attempt}/jobs",
+            "status": status, "conclusion": conclusion,
+            "pull_requests": [{"id": 80, "number": 30,
+                               "head": {"ref": "topic", "sha": "a" * 40, "repo": {"id": 50}},
+                               "base": {"ref": "main", "sha": "b" * 40, "repo": {"id": 50}}}]}
+
+
+def approval_history(attempt=2):
+    return {"schema": "ci-pr-approval-history/1",
+            "current_run": approval_run(attempt, status="in_progress", conclusion=None),
+            "previous_attempts": [{"run": approval_run(number), "jobs": payload()}
+                                  for number in range(1, attempt)]}
+
+
+def approval_kwargs(attempt=2):
+    return {"attempt": attempt, "expected_run_id": 99, "expected_head_sha": "a" * 40,
+            "expected_repository": "owner/project", "expected_repository_id": 50,
+            "expected_workflow_ref": "owner/project/.github/workflows/ci.yml@refs/pull/30/merge",
+            "expected_pull_request": 30, "approval_history": approval_history(attempt)}
+
+
+class ApprovalHistoryTest(unittest.TestCase):
+    def verify(self, kwargs=None, data=None, rule=None):
+        options = approval_kwargs() if kwargs is None else kwargs
+        if data is None:
+            current = job()
+            current["run_attempt"] = options["attempt"]
+            data = payload(current)
+        return budgets.verify(data, rule or policy(), **options)
+
+    def test_approval_resume_keeps_actual_attempt_and_all_job_checks(self):
+        for attempt in (2, 3):
+            result = self.verify(approval_kwargs(attempt))
+            self.assertEqual(result["status"], "pass")
+            self.assertEqual(result["attempt"], attempt)
+            self.assertEqual(result["approval_history"]["previous_attempts"], list(range(1, attempt)))
+            self.assertEqual(result["jobs"][0]["measurements"]["runner_s"], 18)
+        current = job(); current["run_attempt"] = 2
+        current["conclusion"] = "failure"
+        self.assertEqual(self.verify(data=payload(current))["status"], "fail")
+        current["conclusion"] = "success"
+        rule = policy(); rule["jobs"][current["name"]]["running_s"] = 6
+        self.assertEqual(self.verify(data=payload(current), rule=rule)["status"], "fail")
+
+    def test_first_attempt_default_and_explicit_opt_in_remain_distinct(self):
+        self.assertEqual(budgets.verify(payload(job()), policy())["status"], "pass")
+        with self.assertRaises(ValueError):
+            budgets.verify(payload(job()), policy(), attempt=2)
+        options = approval_kwargs(); options["attempt"] = 1
+        with self.assertRaises(ValueError):
+            self.verify(options)
+
+    def test_missing_duplicate_reordered_and_excess_attempts_fail(self):
+        for mutation in (lambda rows: rows.pop(), lambda rows: rows.append(copy.deepcopy(rows[0])),
+                         lambda rows: rows.reverse(), lambda rows: rows.__setitem__(1, copy.deepcopy(rows[0]))):
+            options = approval_kwargs(3)
+            mutation(options["approval_history"]["previous_attempts"])
+            with self.assertRaises(ValueError):
+                self.verify(options)
+        for attempt in (True, 0, 11):
+            options = approval_kwargs(); options["attempt"] = attempt
+            with self.assertRaises(ValueError):
+                self.verify(options)
+
+    def test_every_prior_receipt_must_be_completed_action_required(self):
+        for field, value in (("status", "queued"), ("status", "in_progress"), ("status", None),
+                             ("conclusion", "success"), ("conclusion", "failure"),
+                             ("conclusion", "cancelled"), ("conclusion", "skipped"),
+                             ("conclusion", "timed_out"), ("conclusion", None)):
+            with self.subTest(field=field, value=value):
+                options = approval_kwargs()
+                options["approval_history"]["previous_attempts"][0]["run"][field] = value
+                with self.assertRaises(ValueError):
+                    self.verify(options)
+
+    def test_any_prior_job_or_incomplete_empty_inventory_fails(self):
+        for data in ({}, [], {"jobs": []}, {"total_count": 0},
+                     {"total_count": False, "jobs": []}, {"total_count": 1, "jobs": []},
+                     {"total_count": 0, "jobs": [job()]}, {"total_count": 1, "jobs": [job()]},
+                     [{"total_count": 0, "jobs": []}]):
+            options = approval_kwargs()
+            options["approval_history"]["previous_attempts"][0]["jobs"] = data
+            with self.subTest(data=data), self.assertRaises(ValueError):
+                self.verify(options)
+
+    def test_real_execution_cannot_be_hidden_behind_an_earlier_approval_hold(self):
+        options = approval_kwargs(3)
+        prior = options["approval_history"]["previous_attempts"][1]
+        prior["run"]["conclusion"] = "failure"
+        executed = job(); executed.update(run_attempt=2, conclusion="failure")
+        prior["jobs"] = payload(executed)
+        with self.assertRaises(ValueError):
+            self.verify(options)
+        prior["run"]["conclusion"] = "action_required"
+        with self.assertRaisesRegex(ValueError, "zero-job"):
+            self.verify(options)
+
+    def test_each_caller_identity_is_required_and_not_taken_from_history(self):
+        changes = {"expected_run_id": 100, "expected_head_sha": "c" * 40,
+                   "expected_repository": "other/project", "expected_repository_id": 51,
+                   "expected_workflow_ref": "owner/project/.github/workflows/other.yml@refs/pull/30/merge",
+                   "expected_pull_request": 31}
+        for field, wrong in changes.items():
+            for value in (None, wrong):
+                options = approval_kwargs(); options[field] = value
+                with self.subTest(field=field, value=value), self.assertRaises(ValueError):
+                    self.verify(options)
+
+    def test_attempt_metadata_cannot_be_replayed_or_relabelled(self):
+        mutations = [("id", 100), ("id", True), ("run_attempt", 2), ("run_attempt", True),
+                     ("head_sha", "c" * 40), ("workflow_id", 71), ("workflow_id", True),
+                     ("event", "push"), ("event", "merge_group"),
+                     ("path", ".github/workflows/other.yml"),
+                     ("jobs_url", "https://api.github.com/repos/owner/project/actions/runs/99/jobs"),
+                     ("url", "https://api.github.com/repos/other/project/actions/runs/99")]
+        for field, value in mutations:
+            options = approval_kwargs()
+            options["approval_history"]["previous_attempts"][0]["run"][field] = value
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                self.verify(options)
+
+    def test_repository_pr_head_and_base_identities_must_match(self):
+        mutations = [lambda r: r["repository"].update(id=51),
+                     lambda r: r["repository"].update(full_name="other/project"),
+                     lambda r: r["head_repository"].update(full_name="other/project"),
+                     lambda r: r["pull_requests"].clear(),
+                     lambda r: r["pull_requests"].append(copy.deepcopy(r["pull_requests"][0])),
+                     lambda r: r["pull_requests"][0].update(id=81),
+                     lambda r: r["pull_requests"][0].update(number=31),
+                     lambda r: r["pull_requests"][0]["head"].update(sha="c" * 40),
+                     lambda r: r["pull_requests"][0]["head"].update(ref="other"),
+                     lambda r: r["pull_requests"][0]["base"].update(sha="c" * 40),
+                     lambda r: r["pull_requests"][0]["base"]["repo"].update(id=51)]
+        for mutate in mutations:
+            options = approval_kwargs()
+            mutate(options["approval_history"]["previous_attempts"][0]["run"])
+            with self.assertRaises(ValueError):
+                self.verify(options)
+
+    def test_current_metadata_failure_or_other_event_cannot_be_rescued(self):
+        for updates in ({"event": "push"}, {"event": "merge_group"}, {"run_attempt": 1},
+                        {"status": "completed", "conclusion": "failure"},
+                        {"status": "completed", "conclusion": "action_required"},
+                        {"status": "in_progress", "conclusion": "failure"}):
+            options = approval_kwargs()
+            options["approval_history"]["current_run"].update(updates)
+            with self.subTest(updates=updates), self.assertRaises(ValueError):
+                self.verify(options)
+
+    def test_missing_current_outcomes_are_not_inferred_as_pending_none(self):
+        for field in ("status", "conclusion"):
+            options = approval_kwargs()
+            del options["approval_history"]["current_run"][field]
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                self.verify(options)
+
+    def test_jobs_and_current_setup_must_keep_the_real_attempt(self):
+        current = job()
+        self.assertEqual(self.verify(data=payload(current))["status"], "fail")
+        current, rule = live_aggregate(); current["run_attempt"] = 2
+        record = local_setup(); record["run_attempt"] = 2
+        options = approval_kwargs()
+        options.update(current_job="ci", current_job_setup=record, now=stamp(8))
+        result = self.verify(options, payload(current), rule)
+        self.assertEqual(result["status"], "pass_with_pending")
+        self.assertEqual(result["attempt"], 2)
+        record["run_attempt"] = 1
+        with self.assertRaises(ValueError):
+            self.verify(options, payload(current), rule)
+
+    def test_cli_explicit_history_preserves_attempt_and_malformed_history_fails(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            current = job(); current["run_attempt"] = 2
+            for name, value in (("jobs", payload(current)), ("policy", policy()), ("history", approval_history())):
+                (root / (name + ".json")).write_text(json.dumps(value))
+            args = ["--jobs", str(root / "jobs.json"), "--policy", str(root / "policy.json"),
+                    "--attempt", "2", "--run-id", "99", "--head-sha", "a" * 40,
+                    "--approval-history", str(root / "history.json"), "--repository", "owner/project",
+                    "--repository-id", "50", "--workflow-ref",
+                    "owner/project/.github/workflows/ci.yml@refs/pull/30/merge", "--pull-request", "30"]
+            output = io.StringIO()
+            with redirect_stdout(output):
+                self.assertEqual(budgets.main(args), 0)
+            self.assertEqual(json.loads(output.getvalue())["attempt"], 2)
+            (root / "history.json").write_text('{}')
+            with redirect_stdout(io.StringIO()):
+                self.assertEqual(budgets.main(args), 2)
 
 
 class JobBudgetTest(unittest.TestCase):

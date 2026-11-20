@@ -111,18 +111,35 @@ jobs:
       - name: Read job timing evidence
         env:
           GH_TOKEN: ${{ github.token }}
+          EXPECTED_API_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          EXPECTED_PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          python3 skills/ci-optimiser/scripts/run_budget.py --seconds 10 --label timing-read -- \
-            gh api --paginate --slurp \
-            "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?filter=all&per_page=100" \
-            > "$RUNNER_TEMP/ci-jobs.json"
+          if [ "$GITHUB_RUN_ATTEMPT" = 1 ]; then
+            python3 skills/ci-optimiser/scripts/run_budget.py --seconds 10 --label timing-read -- \
+              gh api --paginate --slurp \
+              "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?filter=all&per_page=100" \
+              > "$RUNNER_TEMP/ci-jobs.json"
+          else
+            test "$GITHUB_EVENT_NAME" = pull_request
+            python3 skills/ci-optimiser/scripts/run_budget.py --seconds 10 --label timing-read -- \
+              python3 .github/collect_ci_approval_history.py \
+              --out "$RUNNER_TEMP/ci-approval-history.json" --jobs-out "$RUNNER_TEMP/ci-jobs.json"
+          fi
       - name: Enforce job budgets
         env:
           EXPECTED_API_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          EXPECTED_PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
+          approval_args=()
+          if [ "$GITHUB_RUN_ATTEMPT" != 1 ]; then
+            test "$GITHUB_EVENT_NAME" = pull_request
+            approval_args=(--approval-history "$RUNNER_TEMP/ci-approval-history.json"
+              --repository "$GITHUB_REPOSITORY" --repository-id "$GITHUB_REPOSITORY_ID"
+              --workflow-ref "$GITHUB_WORKFLOW_REF" --pull-request "$EXPECTED_PR_NUMBER")
+          fi
           python3 skills/ci-optimiser/scripts/run_budget.py --seconds 5 --label budget-verifier -- \
             python3 skills/ci-optimiser/scripts/check_job_budgets.py \
             --jobs "$RUNNER_TEMP/ci-jobs.json" --policy .github/ci-budgets.json \
             --attempt "$GITHUB_RUN_ATTEMPT" --run-id "$GITHUB_RUN_ID" \
             --head-sha "$EXPECTED_API_HEAD_SHA" --current-job ci \
-            --current-job-setup "$RUNNER_TEMP/ci-current-setup.json"
+            --current-job-setup "$RUNNER_TEMP/ci-current-setup.json" "${approval_args[@]}"

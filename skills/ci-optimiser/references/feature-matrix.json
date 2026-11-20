@@ -1746,13 +1746,14 @@
       "version_scope": {
         "reviewed": [
           "ci-job-budgets/1",
-          "ci-current-job-setup/1"
+          "ci-current-job-setup/1",
+          "ci-pr-approval-history/1"
         ],
         "target": "Python >=3.10; local fixture execution on Python 3.12.14/Linux"
       },
       "support_constraints": [
         "Python standard library only",
-        "Offline evidence must match reviewed exact job/step policy, run, SHA and first attempt; supplied evidence is not authenticated.",
+        "Offline evidence must match reviewed exact job/step policy, run and SHA. Attempt 1 remains the default; later PR attempts require complete same-identity approval-only zero-job history plus trusted caller context. Supplied JSON is not authenticated by the verifier.",
         "The current verifier job may retain pending work/runner completion; this is not a completed workflow certificate."
       ],
       "verification": {

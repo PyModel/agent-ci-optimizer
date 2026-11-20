@@ -11,8 +11,12 @@ union of the explicitly named work intervals; runner = job completed-started.
 Job-created-to-started is the API waiting interval, not proven ready-to-run time.
 
 Required --run-id and --head-sha bind evidence to the caller's expected run.
-Inputs are capped at 16 MiB each, 100 pages and 1,000 jobs. Only attempt 1 is
-accepted. All expected jobs and all pages are required. One
+Inputs are capped at 16 MiB each, 100 pages and 1,000 jobs. Attempt 1 is the
+default. --approval-history permits a later PR attempt only when every preceding
+attempt was completed/action_required with a complete zero-job response, bound to
+trusted caller repository/workflow/PR context. No executed retry is accepted.
+Authenticate receipt collection at the workflow boundary; this offline helper
+cannot authenticate caller-supplied JSON. All expected jobs/pages are required. One
 explicit --current-job may still run: its setup marker must have succeeded and
 its first work step must have started. Its running/runner budgets remain pending
 and MUST be bounded externally by run_budget.py/job timeout. Optional
@@ -40,6 +44,9 @@ METRICS = ("waiting_s", "setup_s", "running_s", "runner_s")
 POLICY_FIELDS = set(METRICS) | {"setup_end_step", "work_steps"}
 MAX_INPUT_BYTES, MAX_PAGES, MAX_JOBS = 16 * 1024 * 1024, 100, 1000
 SHA = re.compile(r"[0-9a-fA-F]{40}(?:[0-9a-fA-F]{24})?\Z")
+MAX_APPROVAL_ATTEMPT = 10
+REPOSITORY = re.compile(r"[A-Za-z0-9-]+/[A-Za-z0-9_.-]+\Z")
+WORKFLOW_PATH = re.compile(r"\.github/workflows/[A-Za-z0-9_.-]+\.ya?ml\Z")
 CURRENT_SETUP_FIELDS = {"schema", "job", "run_id", "head_sha", "run_attempt",
                         "setup_end_step", "first_work_step", "observed_at"}
 
@@ -142,12 +149,100 @@ def validate_current_setup(record, current_job, run_id, head_sha, attempt, now):
     return {**record, "observed_s": observed}
 
 
-def check_job(job, limits, current, current_setup=None):
+
+def approval_context(repository, repository_id, workflow_ref, pull_request):
+    """Use trusted caller context, never infer expected identities from receipts."""
+    if (not isinstance(repository, str) or REPOSITORY.fullmatch(repository) is None
+            or not positive_int(repository_id) or not positive_int(pull_request)
+            or not isinstance(workflow_ref, str) or len(workflow_ref) > 1024
+            or not workflow_ref.startswith(repository + "/")):
+        raise ValueError("approval history needs exact repository ID/name, workflow ref and PR number")
+    workflow_path, separator, ref = workflow_ref[len(repository) + 1:].partition("@")
+    if (not separator or WORKFLOW_PATH.fullmatch(workflow_path) is None
+            or not text(ref) or any(c in ref for c in "\r\n\0")):
+        raise ValueError("approval history needs a repository-qualified GitHub workflow ref")
+    return workflow_path, ref
+
+
+def validate_approval_history(history, attempt, run_id, head_sha, *, repository,
+                              repository_id, workflow_ref, pull_request):
+    """Prove supplied history has no prior execution; not source authentication."""
+    path, ref = approval_context(repository, repository_id, workflow_ref, pull_request)
+    if (not positive_int(run_id) or not isinstance(head_sha, str) or SHA.fullmatch(head_sha) is None
+            or type(attempt) is not int or not 2 <= attempt <= MAX_APPROVAL_ATTEMPT):
+        raise ValueError("approval history needs bound run/head and attempt 2..10")
+    if (not isinstance(history, dict) or set(history) != {"schema", "current_run", "previous_attempts"}
+            or history["schema"] != "ci-pr-approval-history/1"):
+        raise ValueError("approval history requires exactly the ci-pr-approval-history/1 fields")
+    previous = history["previous_attempts"]
+    if not isinstance(previous, list) or len(previous) != attempt - 1:
+        raise ValueError("every preceding attempt must be present in approval history")
+
+    def identity(run, number):
+        if not isinstance(run, dict):
+            raise ValueError("approval attempt receipt must be an object")
+        repo, head_repo = run.get("repository"), run.get("head_repository")
+        if (not isinstance(repo, dict) or type(repo.get("id")) is not int
+                or repo["id"] != repository_id or repo.get("full_name") != repository
+                or not isinstance(head_repo, dict) or not positive_int(head_repo.get("id"))
+                or not isinstance(head_repo.get("full_name"), str)
+                or REPOSITORY.fullmatch(head_repo["full_name"]) is None):
+            raise ValueError("approval receipt repository identity mismatch")
+        endpoint = f"https://api.github.com/repos/{repository}/actions/runs/{run_id}"
+        if (type(run.get("id")) is not int or run["id"] != run_id
+                or type(run.get("run_attempt")) is not int or run["run_attempt"] != number
+                or run.get("event") != "pull_request" or not positive_int(run.get("workflow_id"))
+                or run.get("path") not in (path, path + "@" + ref)
+                or not isinstance(run.get("head_sha"), str) or run["head_sha"].lower() != head_sha.lower()
+                or run.get("url") != endpoint
+                or run.get("jobs_url") != endpoint + f"/attempts/{number}/jobs"):
+            raise ValueError("approval receipt run/workflow/head/event/attempt identity mismatch")
+        pulls = run.get("pull_requests")
+        if not isinstance(pulls, list) or len(pulls) != 1 or not isinstance(pulls[0], dict):
+            raise ValueError("approval receipt requires one exact PR identity")
+        pr = pulls[0]
+        if not positive_int(pr.get("id")) or type(pr.get("number")) is not int or pr["number"] != pull_request:
+            raise ValueError("approval receipt PR identity mismatch")
+        refs = []
+        for side in ("head", "base"):
+            branch = pr.get(side)
+            if (not isinstance(branch, dict) or not text(branch.get("ref"))
+                    or not isinstance(branch.get("sha"), str) or SHA.fullmatch(branch["sha"]) is None
+                    or not isinstance(branch.get("repo"), dict) or not positive_int(branch["repo"].get("id"))):
+                raise ValueError("approval receipt PR head/base identity missing")
+            refs.append((branch["ref"], branch["sha"].lower(), branch["repo"]["id"]))
+        if refs[0][1] != head_sha.lower() or refs[0][2] != head_repo["id"] or refs[1][2] != repository_id:
+            raise ValueError("approval receipt PR does not match its run repository/head")
+        return (run["workflow_id"], head_repo["id"], head_repo["full_name"], pr["id"], tuple(refs))
+
+    current = history["current_run"]
+    current_identity = identity(current, attempt)
+    if (not {"status", "conclusion"} <= current.keys()
+            or current.get("status") not in ("queued", "in_progress", "completed")
+            or (current["status"] == "completed" and current.get("conclusion") != "success")
+            or (current["status"] != "completed" and current.get("conclusion") is not None)):
+        raise ValueError("current approval-resumed run has failed or contradictory state")
+    for number, record in enumerate(previous, 1):
+        if not isinstance(record, dict) or set(record) != {"run", "jobs"}:
+            raise ValueError("each preceding attempt needs its run and complete jobs receipt")
+        prior, jobs = record["run"], record["jobs"]
+        if identity(prior, number) != current_identity:
+            raise ValueError("approval history changes workflow or PR identity between attempts")
+        if prior.get("status") != "completed" or prior.get("conclusion") != "action_required":
+            raise ValueError("preceding attempts must be approval-only completed/action_required receipts")
+        if (not isinstance(jobs, dict) or type(jobs.get("total_count")) is not int
+                or jobs["total_count"] != 0 or not isinstance(jobs.get("jobs"), list) or jobs["jobs"]):
+            raise ValueError("preceding attempts must have complete zero-job inventories; executed retries are rejected")
+    return {"kind": "first_execution_after_approval", "previous_attempts": list(range(1, attempt)),
+            "source": "supplied_api_receipts", "source_authentication": "collector_responsibility"}
+
+
+def check_job(job, limits, current, current_setup=None, *, expected_attempt=1):
     result = {"name": job["name"], "measurements": {key: "unknown" for key in METRICS},
               "limits": {key: limits[key] for key in METRICS}, "pending": [], "errors": []}
     try:
-        if job.get("run_attempt") != 1 or type(job.get("run_attempt")) is not int:
-            raise ValueError("missing attempt evidence or rerun detected")
+        if job.get("run_attempt") != expected_attempt or type(job.get("run_attempt")) is not int:
+            raise ValueError("job attempt does not match the verified execution attempt")
         if not {"conclusion", "completed_at"} <= job.keys():
             raise ValueError("job completion evidence is missing")
         live = current and job.get("status") == "in_progress"
@@ -266,13 +361,25 @@ def check_job(job, limits, current, current_setup=None):
 
 
 def verify(payload, policy, attempt=1, current_job=None, *, expected_run_id=None, expected_head_sha=None,
-           current_job_setup=None, now=None):
+           current_job_setup=None, now=None, approval_history=None, expected_repository=None,
+           expected_repository_id=None, expected_workflow_ref=None, expected_pull_request=None):
     expected = validate_policy(policy)
     bound = expected_run_id is not None or expected_head_sha is not None
     if bound and (not positive_int(expected_run_id) or not isinstance(expected_head_sha, str) or SHA.fullmatch(expected_head_sha) is None):
         raise ValueError("expected identity needs a positive run_id and a full hexadecimal head_sha")
-    if type(attempt) is not int or attempt != 1:
-        raise ValueError("only attempt 1 is accepted; reruns cannot certify this policy")
+    if type(attempt) is not int or not 1 <= attempt <= MAX_APPROVAL_ATTEMPT:
+        raise ValueError("execution attempt must be an integer from 1 through 10")
+    approval = None
+    if attempt != 1:
+        if approval_history is None:
+            raise ValueError("only attempt 1 is accepted without complete approval-only history; executed retries cannot certify this policy")
+        approval = validate_approval_history(
+            approval_history, attempt, expected_run_id, expected_head_sha,
+            repository=expected_repository, repository_id=expected_repository_id,
+            workflow_ref=expected_workflow_ref, pull_request=expected_pull_request)
+    elif approval_history is not None or any(value is not None for value in (
+            expected_repository, expected_repository_id, expected_workflow_ref, expected_pull_request)):
+        raise ValueError("approval-history options apply only to a later PR execution attempt")
     if current_job is not None and current_job not in expected:
         raise ValueError("current-job must exactly match a policy job")
     local_setup = None if current_job_setup is None else validate_current_setup(
@@ -296,7 +403,7 @@ def verify(payload, policy, attempt=1, current_job=None, *, expected_run_id=None
             errors.append("an unexpected job is absent from the exact policy")
             continue
         results.append(check_job(job, expected[name], name == current_job,
-                                 local_setup if name == current_job else None))
+                                 local_setup if name == current_job else None, expected_attempt=attempt))
     if len(runs) != 1 or len(heads) != 1:
         errors.append("job run_id/head_sha provenance is inconsistent or unavailable")
     if bound and (runs != {expected_run_id} or heads != {expected_head_sha.lower()}):
@@ -310,7 +417,7 @@ def verify(payload, policy, attempt=1, current_job=None, *, expected_run_id=None
             "status": "fail" if failed else ("pass_with_pending" if pending else "pass"),
             "run_id": next(iter(runs)) if len(runs) == 1 else "unknown",
             "head_sha": next(iter(heads)) if len(heads) == 1 else "unknown",
-            "errors": errors, "jobs": results}
+            "errors": errors, "jobs": results, **({"approval_history": approval} if approval else {})}
 
 
 def unique_object(pairs):
@@ -340,12 +447,21 @@ def main(argv=None):
     parser.add_argument("--current-job")
     parser.add_argument("--current-job-setup", type=Path,
                         help="trusted local first-work boundary; current job only, never completed jobs")
+    parser.add_argument("--approval-history", type=Path,
+                        help="explicit authenticated-collection receipts for prior zero-job PR approval holds")
+    parser.add_argument("--repository", help="trusted GitHub repository context, OWNER/REPO")
+    parser.add_argument("--repository-id", type=int, help="trusted GitHub numeric repository ID")
+    parser.add_argument("--workflow-ref", help="trusted GitHub repository-qualified workflow ref")
+    parser.add_argument("--pull-request", type=int, help="trusted GitHub PR number")
     args = parser.parse_args(argv)
     try:
         payload, policy = read_json(args.jobs), read_json(args.policy)
         result = verify(payload, policy, args.attempt, args.current_job,
                         expected_run_id=args.run_id, expected_head_sha=args.head_sha,
-                        current_job_setup=read_json(args.current_job_setup) if args.current_job_setup else None)
+                        current_job_setup=read_json(args.current_job_setup) if args.current_job_setup else None,
+                        approval_history=read_json(args.approval_history) if args.approval_history else None,
+                        expected_repository=args.repository, expected_repository_id=args.repository_id,
+                        expected_workflow_ref=args.workflow_ref, expected_pull_request=args.pull_request)
     except (OSError, UnicodeError, ValueError, RecursionError) as exc:
         error = str(exc) if type(exc) is ValueError else "could not read valid JSON input"
         print(json.dumps({"schema": "ci-job-budget-result/1", "status": "invalid_input", "errors": [error]}))

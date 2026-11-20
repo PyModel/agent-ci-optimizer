@@ -17,6 +17,9 @@ and its [maintainer-approved CI decision](https://github.com/PyModel/jev-judge-m
 3. Review that PR. GitHub creates approval-required PR workflow runs for changes
    made by the built-in token; a maintainer with write access selects **Approve
    workflows to run** in the PR. Approve each new bot revision when requested.
+   GitHub may advance its attempt counter even when the earlier approval hold ran
+   no jobs; CI requires the explicit zero-execution proof described below. This
+   does not authorize rerunning a failed check.
 4. Wait for the full required checks and use the existing merge queue. There is
    no release-specific bypass, automatic approval or automatic merge.
 5. Once the release PR reaches main and its full CI passes, Release Please creates
@@ -118,10 +121,24 @@ investigation; it does not claim an automatic rollback.
 ## Failures and bounds
 
 The repository publisher makes one bounded API call per operation with no retry
-loop. CI and release attempts greater than 1 are rejected. There are no workflow
+loop. Source-push CI, merge-queue CI and release attempts greater than 1 remain
+rejected. PR feedback has one explicit exception: authenticated, attempt-specific
+receipts must show every prior attempt was completed/action_required with a complete
+zero-job inventory and the same repository/run/workflow/SHA/PR identities. The
+[budget verifier contract](../skills/ci-optimiser/references/13-measured-adapters.md#pr-approval-history)
+binds that history to trusted GitHub context and retains the actual attempt number.
+Missing, failed, cancelled or executed history cannot qualify. There are no workflow
 rerun/republish inputs, ignored failures, skipped suite legs or timeout increases.
 A failure leaves the evidence red; investigate and fix it in a new reviewed
 commit. Do not rerun a failing check until it happens to pass.
+
+Observed on 2026-11-20: [run 44781673275](https://github.com/PyModel/ci-optimiser/actions/runs/44781673275)
+for release PR #30 initially had attempt 1 completed/action_required and
+[zero jobs](https://api.github.com/repos/PyModel/ci-optimiser/actions/runs/44781673275/attempts/1/jobs?per_page=100).
+Maintainer approval resumed it as attempt 2. Its three leaf checks passed, but the
+old budget verifier rejected the attempt number. That actual failed attempt 2
+remains failed; only a new revision can validate the fix. Approval waiting remains
+part of end-to-end PR latency and is not erased by this distinction.
 
 The pinned Release Please dependency itself has upstream GraphQL transport retries
 for null responses and HTTP 502, with up to five retries and no action input to
