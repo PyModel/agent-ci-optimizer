@@ -17,9 +17,9 @@ concurrency:
 
 jobs:
   test:
-    # Blacksmith activation is a separate measured change; do not queue jobs on
-    # unregistered labels. The full Python matrix runs on every candidate.
-    runs-on: ubuntu-latest
+    # Requires Blacksmith GitHub App access for this repository.
+    # The full Python matrix runs on every candidate.
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 2
     strategy:
       fail-fast: false
@@ -39,7 +39,7 @@ jobs:
       - name: Unit + packaging tests
         run: python scripts/run_budget.py --seconds 60 --label tests -- python -m unittest discover -s tests -v
   workflow-lint:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 1
     steps:
       - name: Checkout repository
@@ -64,7 +64,7 @@ jobs:
   ci:
     if: always()
     needs: [test, workflow-lint]
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 1
     permissions:
       contents: read
