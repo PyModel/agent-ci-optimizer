@@ -72,6 +72,7 @@ jobs:
       actions: read
     steps:
       - name: Checkout repository
+        id: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           filter: blob:none
@@ -79,11 +80,34 @@ jobs:
           persist-credentials: false
       - name: Require success
         env:
+          CHECKOUT_OUTCOME: ${{ steps.checkout.outcome }}
           TEST_RESULT: ${{ needs.test.result }}
           LINT_RESULT: ${{ needs.workflow-lint.result }}
+          EXPECTED_API_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
+          test "$CHECKOUT_OUTCOME" = success
           test "$TEST_RESULT" = success
           test "$LINT_RESULT" = success
+          # This first work step can observe setup completion before the jobs
+          # API catches up. Its timestamp conservatively includes work so far.
+          python3 - <<'PY'
+          from datetime import datetime, timezone
+          import json
+          import os
+          from pathlib import Path
+          record = {
+              "schema": "ci-current-job-setup/1",
+              "job": os.environ["GITHUB_JOB"],
+              "run_id": int(os.environ["GITHUB_RUN_ID"]),
+              "head_sha": os.environ["EXPECTED_API_HEAD_SHA"],
+              "run_attempt": int(os.environ["GITHUB_RUN_ATTEMPT"]),
+              "setup_end_step": "Checkout repository",
+              "first_work_step": "Require success",
+              "observed_at": datetime.now(timezone.utc).isoformat(),
+          }
+          with (Path(os.environ["RUNNER_TEMP"]) / "ci-current-setup.json").open("x") as stream:
+              json.dump(record, stream)
+          PY
       - name: Read job timing evidence
         env:
           GH_TOKEN: ${{ github.token }}
@@ -100,4 +124,5 @@ jobs:
             python3 skills/ci-optimiser/scripts/check_job_budgets.py \
             --jobs "$RUNNER_TEMP/ci-jobs.json" --policy .github/ci-budgets.json \
             --attempt "$GITHUB_RUN_ATTEMPT" --run-id "$GITHUB_RUN_ID" \
-            --head-sha "$EXPECTED_API_HEAD_SHA" --current-job ci
+            --head-sha "$EXPECTED_API_HEAD_SHA" --current-job ci \
+            --current-job-setup "$RUNNER_TEMP/ci-current-setup.json"

@@ -42,6 +42,27 @@ def payload(*jobs):
     return {"total_count": len(jobs), "jobs": list(jobs)}
 
 
+def live_aggregate():
+    """The real API lag: checkout is running and every work step is pending."""
+    data = job("ci", 4)
+    data.update(status="in_progress", conclusion=None, completed_at=None)
+    data["steps"] = [step(1, "Checkout repository", 2, 3)]
+    data["steps"][0].update(status="in_progress", conclusion=None, completed_at=None)
+    for number, name in enumerate(("Require success", "Read job timing evidence", "Enforce job budgets"), 2):
+        data["steps"].append({"number": number, "name": name, "status": "pending", "conclusion": None,
+                              "started_at": None, "completed_at": None})
+    rule = policy("ci")
+    rule["jobs"]["ci"].update(setup_end_step="Checkout repository",
+                               work_steps=[s["name"] for s in data["steps"][1:]])
+    return data, rule
+
+
+def local_setup():
+    return {"schema": "ci-current-job-setup/1", "job": "ci", "run_id": 99, "head_sha": "a" * 40,
+            "run_attempt": 1, "setup_end_step": "Checkout repository", "first_work_step": "Require success",
+            "observed_at": stamp(6)}
+
+
 class JobBudgetTest(unittest.TestCase):
     def assert_failure(self, data, rule=None, **kwargs):
         result = budgets.verify(data, rule or policy(), **kwargs)
@@ -271,6 +292,138 @@ class JobBudgetTest(unittest.TestCase):
         data.update(status="in_progress", conclusion=None)
         del data["completed_at"]
         self.assert_failure(payload(data), policy("ci"), current_job="ci")
+
+    def local_verify(self, data, rule, record=None, **kwargs):
+        return budgets.verify(payload(data), rule, current_job="ci", expected_run_id=99,
+                              expected_head_sha="a" * 40, current_job_setup=record or local_setup(),
+                              now=stamp(40), **kwargs)
+
+    def test_local_boundary_handles_stale_checkout_without_rewriting_api_state(self):
+        data, rule = live_aggregate()
+        original = json.dumps(data, sort_keys=True)
+        result = self.local_verify(data, rule)
+        self.assertEqual(result["status"], "pass_with_pending", result)
+        current = result["jobs"][0]
+        self.assertEqual(current["measurements"], {
+            "waiting_s": 2, "setup_s": 4, "running_s": "pending", "runner_s": "pending"})
+        self.assertEqual(current["setup_evidence"], {
+            "source": "local_workflow_boundary", "kind": "conservative_upper_bound"})
+        self.assertEqual([s["status"] for s in current["step_states"]], ["in_progress", "pending", "pending", "pending"])
+        self.assertEqual(json.dumps(data, sort_keys=True), original)
+        self.assert_failure(payload(data), rule, current_job="ci", expected_run_id=99, expected_head_sha="a" * 40)
+
+    def test_local_boundary_keeps_strict_waiting_and_setup_limits(self):
+        for metric, value in (("waiting_s", 2), ("setup_s", 4)):
+            with self.subTest(metric=metric):
+                data, rule = live_aggregate()
+                rule["jobs"]["ci"][metric] = value
+                result = self.local_verify(data, rule)
+                self.assertEqual(result["status"], "fail")
+                self.assertIn(metric, result["jobs"][0]["errors"][0])
+
+    def test_local_boundary_needs_exact_identity_and_explicit_bound_current_job(self):
+        data, rule = live_aggregate()
+        for field, value in (("job", "other"), ("run_id", 100), ("run_id", True),
+                             ("head_sha", "b" * 40), ("head_sha", "not-a-sha"),
+                             ("run_attempt", 2), ("run_attempt", True)):
+            with self.subTest(field=field, value=value), self.assertRaises(ValueError):
+                self.local_verify(data, rule, {**local_setup(), field: value})
+        for identity in ({}, {"current_job": "ci"}, {"expected_run_id": 99, "expected_head_sha": "a" * 40}):
+            with self.subTest(identity=identity), self.assertRaises(ValueError):
+                budgets.verify(payload(data), rule, current_job_setup=local_setup(), **identity)
+        record = local_setup()
+        record["head_sha"] = "A" * 40
+        self.assertEqual(self.local_verify(data, rule, record)["status"], "pass_with_pending")
+
+    def test_local_boundary_rejects_missing_unknown_or_invalid_fields(self):
+        data, rule = live_aggregate()
+        records = [{**local_setup(), "schema": "unknown"}, {**local_setup(), "extra": 1},
+                   {**local_setup(), "first_work_step": ""}, {**local_setup(), "observed_at": "bad"},
+                   {**local_setup(), "observed_at": "2026-11-20T00:00:06"}]
+        for field in local_setup():
+            records.append({k: v for k, v in local_setup().items() if k != field})
+        for record in records:
+            with self.subTest(record=record), self.assertRaises(ValueError):
+                self.local_verify(data, rule, record)
+
+    def test_local_boundary_fails_closed_on_clock_disagreement(self):
+        data, rule = live_aggregate()
+        before_start = {**local_setup(), "observed_at": stamp(1)}
+        self.assertEqual(self.local_verify(data, rule, before_start)["status"], "fail")
+        with self.assertRaises(ValueError):
+            self.local_verify(data, rule, {**local_setup(), "observed_at": stamp(41)})
+        # A trustworthy current clock is mandatory; no clamping or slack.
+        with self.assertRaises(ValueError):
+            budgets.verify(payload(data), rule, current_job="ci", expected_run_id=99,
+                           expected_head_sha="a" * 40, current_job_setup=local_setup(), now="bad")
+
+    def test_local_boundary_rejects_wrong_policy_boundaries_and_later_api_times(self):
+        for change in ("marker", "first_work", "setup_time", "work_time", "missing_work"):
+            with self.subTest(change=change):
+                data, rule = live_aggregate()
+                record = local_setup()
+                if change == "marker":
+                    record["setup_end_step"] = "Wrong setup"
+                elif change == "first_work":
+                    record["first_work_step"] = "Read job timing evidence"
+                elif change == "setup_time":
+                    data["steps"][0].update(status="completed", conclusion="success", completed_at=stamp(7))
+                elif change == "work_time":
+                    data["steps"][0].update(status="completed", conclusion="success", completed_at=stamp(3))
+                    data["steps"][1].update(status="in_progress", started_at=stamp(7))
+                else:
+                    data["steps"].pop()
+                self.assertEqual(self.local_verify(data, rule, record)["status"], "fail")
+
+    def test_local_boundary_never_rescues_observed_failure_skip_or_contradiction(self):
+        for conclusion in ("failure", "skipped", "cancelled", "timed_out", "neutral", "action_required"):
+            for index in (0, 1):
+                with self.subTest(conclusion=conclusion, index=index):
+                    data, rule = live_aggregate()
+                    data["steps"][index].update(status="completed", conclusion=conclusion,
+                                                 started_at=stamp(3), completed_at=stamp(4))
+                    self.assertEqual(self.local_verify(data, rule)["status"], "fail")
+        data, rule = live_aggregate()
+        data["steps"][1]["started_at"] = stamp(4)  # Pending with a start is still contradictory.
+        self.assertEqual(self.local_verify(data, rule)["status"], "fail")
+
+    def test_local_boundary_cannot_rescue_upstream_jobs_or_missing_pages(self):
+        for change in ("failed", "unfinished", "step_pending", "missing_page"):
+            with self.subTest(change=change):
+                data, rule = live_aggregate()
+                upstream = job()
+                rule["jobs"].update(policy()["jobs"])
+                if change == "failed":
+                    upstream["conclusion"] = "failure"
+                elif change == "unfinished":
+                    upstream.update(status="in_progress", conclusion=None, completed_at=None)
+                elif change == "step_pending":
+                    upstream["steps"][2].update(status="pending", conclusion=None, started_at=None, completed_at=None)
+                evidence = payload(upstream, data)
+                if change == "missing_page":
+                    evidence["total_count"] = 3
+                result = budgets.verify(evidence, rule, current_job="ci", expected_run_id=99,
+                                        expected_head_sha="a" * 40, current_job_setup=local_setup(), now=stamp(40))
+                self.assertEqual(result["status"], "fail")
+
+    def test_local_boundary_does_not_apply_to_completed_current_job(self):
+        data, rule = live_aggregate()
+        data.update(status="completed", conclusion="success", completed_at=stamp(20))
+        self.assertEqual(self.local_verify(data, rule)["status"], "fail")
+
+    def test_local_boundary_cli_reads_record_and_keeps_runtime_pending(self):
+        data, rule = live_aggregate()
+        with tempfile.TemporaryDirectory() as td:
+            paths = [Path(td) / name for name in ("jobs.json", "policy.json", "setup.json")]
+            for path, content in zip(paths, (payload(data), rule, local_setup())):
+                path.write_text(json.dumps(content))
+            output = io.StringIO()
+            with redirect_stdout(output):
+                rc = budgets.main(["--jobs", str(paths[0]), "--policy", str(paths[1]), "--attempt", "1",
+                                   "--run-id", "99", "--head-sha", "a" * 40, "--current-job", "ci",
+                                   "--current-job-setup", str(paths[2])])
+            self.assertEqual(rc, 0)
+            self.assertEqual(json.loads(output.getvalue())["status"], "pass_with_pending")
 
     def test_bad_policy_attempt_and_payload_are_invalid_input(self):
         for number in (0, -1, True, float("nan"), float("inf"), 10 ** 400):

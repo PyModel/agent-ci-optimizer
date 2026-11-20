@@ -15,7 +15,13 @@ Inputs are capped at 16 MiB each, 100 pages and 1,000 jobs. Only attempt 1 is
 accepted. All expected jobs and all pages are required. One
 explicit --current-job may still run: its setup marker must have succeeded and
 its first work step must have started. Its running/runner budgets remain pending
-and MUST be bounded externally by run_budget.py/job timeout. No API calls, writes,
+and MUST be bounded externally by run_budget.py/job timeout. Optional
+--current-job-setup accepts a ci-current-job-setup/1 record written by the trusted
+workflow during its first work step, after successful setup. It binds job, run,
+head and attempt, and uses observed_at as a conservative setup upper bound when
+the live API timeline lags. It never replaces an observed failure or changes
+completed-job validation. This caller-supplied record is not an attestation.
+Without it, setup still requires complete API evidence. No API calls, writes,
 retries, percentile certification, or proof of branch/merge-queue rules occurs.
 Exit 0: observed budgets pass (possibly with explicit pending current-job limits);
 1: failure/incomplete evidence; 2: malformed input or policy.
@@ -23,7 +29,7 @@ Exit 0: observed budgets pass (possibly with explicit pending current-job limits
 from __future__ import annotations
 
 import argparse
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 import math
 from pathlib import Path
@@ -34,6 +40,8 @@ METRICS = ("waiting_s", "setup_s", "running_s", "runner_s")
 POLICY_FIELDS = set(METRICS) | {"setup_end_step", "work_steps"}
 MAX_INPUT_BYTES, MAX_PAGES, MAX_JOBS = 16 * 1024 * 1024, 100, 1000
 SHA = re.compile(r"[0-9a-fA-F]{40}(?:[0-9a-fA-F]{24})?\Z")
+CURRENT_SETUP_FIELDS = {"schema", "job", "run_id", "head_sha", "run_attempt",
+                        "setup_end_step", "first_work_step", "observed_at"}
 
 
 def text(value):
@@ -115,7 +123,26 @@ def union_seconds(intervals):
     return total
 
 
-def check_job(job, limits, current):
+def validate_current_setup(record, current_job, run_id, head_sha, attempt, now):
+    if current_job is None or run_id is None or head_sha is None:
+        raise ValueError("local setup evidence requires current-job and bound run/head identity")
+    if not isinstance(record, dict) or set(record) != CURRENT_SETUP_FIELDS or record["schema"] != "ci-current-job-setup/1":
+        raise ValueError("local setup evidence requires exactly the ci-current-job-setup/1 fields")
+    if (record["job"] != current_job or not positive_int(record["run_id"]) or record["run_id"] != run_id
+            or type(record["run_attempt"]) is not int or record["run_attempt"] != attempt
+            or not isinstance(record["head_sha"], str) or SHA.fullmatch(record["head_sha"]) is None
+            or record["head_sha"].lower() != head_sha.lower()):
+        raise ValueError("local setup evidence does not match the current job/run/head/attempt")
+    if not text(record["setup_end_step"]) or not text(record["first_work_step"]):
+        raise ValueError("local setup evidence must name its setup and first work boundaries")
+    observed = timestamp(record["observed_at"], "local setup observed_at")
+    clock = datetime.now(timezone.utc).timestamp() if now is None else timestamp(now, "verification clock")
+    if observed > clock:
+        raise ValueError("local setup timestamp is later than the verification clock")
+    return {**record, "observed_s": observed}
+
+
+def check_job(job, limits, current, current_setup=None):
     result = {"name": job["name"], "measurements": {key: "unknown" for key in METRICS},
               "limits": {key: limits[key] for key in METRICS}, "pending": [], "errors": []}
     try:
@@ -124,6 +151,8 @@ def check_job(job, limits, current):
         if not {"conclusion", "completed_at"} <= job.keys():
             raise ValueError("job completion evidence is missing")
         live = current and job.get("status") == "in_progress"
+        if current_setup is not None and not live:
+            raise ValueError("local setup evidence applies only to the live current job")
         if not live and (job.get("status") != "completed" or job.get("conclusion") != "success"):
             raise ValueError("job must complete successfully; skipped, failed, cancelled or incomplete jobs cannot pass")
         if live and (job.get("conclusion") is not None or job.get("completed_at") is not None):
@@ -133,6 +162,8 @@ def check_job(job, limits, current):
         finished = None if live else timestamp(job.get("completed_at"), "job completed_at")
         if started < created or (finished is not None and finished < started):
             raise ValueError("job timestamps are out of order")
+        if current_setup is not None and current_setup["observed_s"] < started:
+            raise ValueError("local setup timestamp precedes the API job start")
         steps = job.get("steps")
         if not isinstance(steps, list) or not steps:
             raise ValueError("step evidence is missing")
@@ -169,20 +200,42 @@ def check_job(job, limits, current):
             previous_start = begin
             by_name[step["name"]] = (begin, end, state)
         marker = by_name.get(limits["setup_end_step"])
-        if marker is None or marker[2] != "completed":
+        if marker is None:
+            raise ValueError("setup_end_step must exist")
+        if current_setup is None and marker[2] != "completed":
             raise ValueError("setup_end_step must exist and have completed successfully")
         work = [by_name.get(name) for name in limits["work_steps"]]
         if any(step is None for step in work):
             raise ValueError("an explicit work step is missing")
         # The first work step is the earliest declared work step in execution
         # order, not whichever later work step happens to have a timestamp.
-        first_work = next(step[0] for name, step in by_name.items() if name in limits["work_steps"])
-        if first_work is None:
+        first_name, first_step = next((name, step) for name, step in by_name.items() if name in limits["work_steps"])
+        first_work = first_step[0]
+        if first_work is None and current_setup is None:
             raise ValueError("first work start is unknown")
-        if marker[1] > first_work:
+        if marker[1] is not None and first_work is not None and marker[1] > first_work:
             raise ValueError("setup marker must complete before work starts")
+        if current_setup is not None:
+            if (current_setup["setup_end_step"] != limits["setup_end_step"]
+                    or current_setup["first_work_step"] != first_name):
+                raise ValueError("local setup boundaries do not match the policy and step order")
+            boundary = current_setup["observed_s"]
+            # The record is written within the first work step, so its start and
+            # all preceding setup timestamps must be no later than the record.
+            # Keep the API states untouched: local evidence supplies a bound,
+            # never an invented success, duration or completed work interval.
+            for name, step in by_name.items():
+                observed_times = (step[0],) if name == first_name else step[:2]
+                if any(value is not None and value > boundary for value in observed_times):
+                    raise ValueError("API setup or first work timestamp exceeds the local boundary")
+                if name == first_name:
+                    break
+            setup = boundary - started
+            result["setup_evidence"] = {"source": "local_workflow_boundary", "kind": "conservative_upper_bound"}
+        else:
+            setup = first_work - started
         measurements = result["measurements"]
-        measurements.update(waiting_s=started - created, setup_s=first_work - started)
+        measurements.update(waiting_s=started - created, setup_s=setup)
         if live:
             result["pending"] = ["running_s", "runner_s"]
             measurements.update(running_s="pending", runner_s="pending")
@@ -212,7 +265,8 @@ def check_job(job, limits, current):
     return result
 
 
-def verify(payload, policy, attempt=1, current_job=None, *, expected_run_id=None, expected_head_sha=None):
+def verify(payload, policy, attempt=1, current_job=None, *, expected_run_id=None, expected_head_sha=None,
+           current_job_setup=None, now=None):
     expected = validate_policy(policy)
     bound = expected_run_id is not None or expected_head_sha is not None
     if bound and (not positive_int(expected_run_id) or not isinstance(expected_head_sha, str) or SHA.fullmatch(expected_head_sha) is None):
@@ -221,6 +275,8 @@ def verify(payload, policy, attempt=1, current_job=None, *, expected_run_id=None
         raise ValueError("only attempt 1 is accepted; reruns cannot certify this policy")
     if current_job is not None and current_job not in expected:
         raise ValueError("current-job must exactly match a policy job")
+    local_setup = None if current_job_setup is None else validate_current_setup(
+        current_job_setup, current_job, expected_run_id, expected_head_sha, attempt, now)
     jobs, errors = unpack_jobs(payload)
     ids, names, runs, heads, results = set(), set(), set(), set(), []
     for job in jobs:
@@ -239,7 +295,8 @@ def verify(payload, policy, attempt=1, current_job=None, *, expected_run_id=None
         if name not in expected:
             errors.append("an unexpected job is absent from the exact policy")
             continue
-        results.append(check_job(job, expected[name], name == current_job))
+        results.append(check_job(job, expected[name], name == current_job,
+                                 local_setup if name == current_job else None))
     if len(runs) != 1 or len(heads) != 1:
         errors.append("job run_id/head_sha provenance is inconsistent or unavailable")
     if bound and (runs != {expected_run_id} or heads != {expected_head_sha.lower()}):
@@ -281,11 +338,14 @@ def main(argv=None):
     parser.add_argument("--run-id", type=int, required=True)
     parser.add_argument("--head-sha", required=True)
     parser.add_argument("--current-job")
+    parser.add_argument("--current-job-setup", type=Path,
+                        help="trusted local first-work boundary; current job only, never completed jobs")
     args = parser.parse_args(argv)
     try:
         payload, policy = read_json(args.jobs), read_json(args.policy)
         result = verify(payload, policy, args.attempt, args.current_job,
-                        expected_run_id=args.run_id, expected_head_sha=args.head_sha)
+                        expected_run_id=args.run_id, expected_head_sha=args.head_sha,
+                        current_job_setup=read_json(args.current_job_setup) if args.current_job_setup else None)
     except (OSError, UnicodeError, ValueError, RecursionError) as exc:
         error = str(exc) if type(exc) is ValueError else "could not read valid JSON input"
         print(json.dumps({"schema": "ci-job-budget-result/1", "status": "invalid_input", "errors": [error]}))
