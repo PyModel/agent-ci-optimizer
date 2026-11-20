@@ -62,6 +62,7 @@ def analyze(data):
         if not math.isfinite(total):
             raise ValueError('cost overflow')
         complete = len(measured) == len(events)
+        negative_ids = [e['id'] for e in events if e['net_saved_s'] is not None and e['net_saved_s'] < 0]
         result.append({'cache': cache, 'cohort': cohort, 'events': sorted(events, key=lambda e: e['id']),
                        'outcome_counts': {name: sum(e['outcome'] == name for e in events) for name in sorted({e['outcome'] for e in events})},
                        'total_restored_bytes': sum(e['restored_bytes'] for e in events) if all(e['restored_bytes'] is not None for e in events) else None,
@@ -73,11 +74,15 @@ def analyze(data):
                        'known_net_saved_s': total if measured else None,
                        'total_net_saved_s': total if complete else None,
                        'mean_net_saved_s': total / len(measured) if measured else None,
+                       'negative_savings_event_count': len(negative_ids),
+                       'negative_savings_event_ids': negative_ids,
+                       'warnings': ['measured_negative_cache_events'] if negative_ids else [],
                        'recommendation': 'investigate_negative_savings' if complete and total < 0 else 'measure_before_changing'})
     return {'schema': 'ci-cache-analysis/1', 'groups': result,
             'limitations': ['Baselines and cohort comparability are supplied, not verified.',
                            'Savings are runner seconds, not critical-path or monetary savings.',
-                           'Partial economics cannot establish total savings.']}
+                           'Partial economics cannot establish total savings.',
+                           'Negative-event warnings describe observations, not established population regressions or automatic cache-removal decisions.']}
 
 
 def main(argv=None):

@@ -103,6 +103,29 @@ class Shards(unittest.TestCase):
 
 
 class Cache(unittest.TestCase):
+    def test_negative_events_remain_visible_in_partial_and_positive_cohorts(self):
+        negative = event(id='loss', restore_s=30)
+        for other, total in ((None, -12), (event(id='unknown', save_s=None), None),
+                             (event(id='gain'), 3)):
+            with self.subTest(other=other):
+                result = analyze(negative, *([other] if other else []))[0]
+                self.assertEqual(result['negative_savings_event_count'], 1)
+                self.assertEqual(result['negative_savings_event_ids'], ['loss'])
+                self.assertEqual(result['warnings'], ['measured_negative_cache_events'])
+                self.assertEqual(result['total_net_saved_s'], total)
+                self.assertEqual(result['recommendation'], 'investigate_negative_savings'
+                                 if other is None else 'measure_before_changing')
+
+    def test_negative_warning_requires_a_measured_loss_and_has_stable_ids(self):
+        result = analyze(event(id='z', restore_s=30), event(id='a', restore_s=40))[0]
+        self.assertEqual(result['negative_savings_event_ids'], ['a', 'z'])
+        self.assertEqual(result['negative_savings_event_count'], 2)
+        result = analyze(event(), event(id='unknown', work_s=None),
+                         event(id='unverified', restore_s=30, baseline_comparable=False))[0]
+        self.assertEqual(result['negative_savings_event_count'], 0)
+        self.assertEqual(result['negative_savings_event_ids'], [])
+        self.assertEqual(result['warnings'], [])
+
     def test_costs_not_hit_rate_determine_economics(self):
         result = analyze(event(restore_s=30))[0]
         self.assertEqual(result['observed_hit_rate'], 1)
