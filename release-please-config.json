@@ -1,0 +1,16 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/v17.6.0/schemas/config.json",
+  "bootstrap-sha": "d849a540787e37a004a699da0b300b796efd184c",
+  "release-type": "simple",
+  "include-component-in-tag": false,
+  "include-v-in-tag": true,
+  "draft": true,
+  "force-tag-creation": true,
+  "packages": {
+    ".": {
+      "package-name": "ci-optimiser",
+      "version-file": "version.txt",
+      "changelog-path": "CHANGELOG.md"
+    }
+  }
+}

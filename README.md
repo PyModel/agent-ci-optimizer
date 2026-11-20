@@ -1,6 +1,8 @@
 # ![ci-optimiser — Faster CI. Honest results.](assets/social-preview.png)
 
 [![skills.sh installs](https://skills.sh/b/pymodel/ci-optimiser)](https://skills.sh/pymodel/ci-optimiser)
+[![Release](https://github.com/PyModel/ci-optimiser/actions/workflows/release.yml/badge.svg)](https://github.com/PyModel/ci-optimiser/actions/workflows/release.yml)
+[![Latest release](https://img.shields.io/github/v/release/PyModel/ci-optimiser)](https://github.com/PyModel/ci-optimiser/releases/latest)
 
 An agent skill that makes CI faster without making it lie. It audits a repo's
 push → trustworthy green → merge loop, measures where the time goes, and proposes one
@@ -133,14 +135,34 @@ shared storage allowance. The one-day retention limits that usage.
 ## Test
 
 ```bash
-cd skills/ci-optimiser
-python3 -m unittest discover -s tests -v   # full bundled suite and source documentation
-cd ../..
+python3 .github/run_repository_tests.py    # full bundle + repository release policy
 actionlint                                # repository workflow lint
 ```
 
-For an installed copy, run the same unittest command from its `ci-optimiser`
-directory. Its self-tests do not require repository-only CI or README files.
+For an installed copy, run `python3 -m unittest discover -s tests -v` from its
+`ci-optimiser` directory. Its self-tests do not require repository-only CI or README files.
+
+## Automated releases
+
+[Release Please](https://github.com/googleapis/release-please-action) maintains a
+version and changelog PR after successful first-attempt `main` CI, using the same
+built-in-token approach as [Jev Judge MCP](https://github.com/PyModel/jev-judge-mcp).
+The existing `v0.1.0` tag and release remain unchanged. Use Conventional Commit
+squash titles such as `fix: reject incomplete timing evidence` or
+`feat: add a provider adapter`; plain descriptive history is not inferred as release notes.
+
+Review the bot PR, select **Approve workflows to run** when GitHub requests it,
+then use the normal full-suite merge queue. The bot creates a draft release.
+Publication requires the exact current-main commit, complete green CI jobs and
+steps on attempt 1, matching version/tag metadata, and a passing standalone skill
+suite. It publishes source releases; it does not require a package registry.
+
+One repository setting is required: **Settings → Actions → General → Workflow
+permissions → Allow GitHub Actions to create and approve pull requests**. The
+workflow itself never approves or merges a PR. No additional account, PAT, App
+secret or paid runner service is needed. Read the
+[release automation guide](docs/release-automation.md) for activation, versioning,
+failure handling, bounds and the precise publication guarantees.
 
 ## Local pre-push hook
 
