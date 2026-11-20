@@ -12,14 +12,14 @@ import math
 import sys
 from collections import defaultdict
 from cache_evidence import compare_contexts, reference
-from plan_shards import label, load_json, number, rows
+from plan_shards import MAX_ROWS, label, load_json, number, rows
 
 COMPONENTS = ('restore_s', 'save_s', 'work_s', 'uncached_work_s')
 RESTORE_OUTCOMES = {'exact_hit', 'fallback_hit', 'miss', 'restore_failure', 'disabled', 'unknown'}
 SAVE_OUTCOMES = {'saved', 'not_needed', 'write_disabled', 'save_failure', 'unknown'}
 V2_FIELDS = {'id', 'cache', 'cohort', 'restore_outcome', 'save_outcome', 'comparison',
              'timing_model', 'timing_scope', 'elapsed_s', 'uncached_elapsed_s',
-             'restored_bytes', 'saved_bytes', *COMPONENTS}
+             'restored_bytes', 'saved_bytes', 'eligible_pr_restore', *COMPONENTS}
 
 
 def timings(event, keys):
@@ -56,6 +56,9 @@ def layered_event(event):
         raise ValueError('invalid restore outcome')
     if not isinstance(save, str) or save not in SAVE_OUTCOMES:
         raise ValueError('invalid save outcome')
+    eligible = event.get('eligible_pr_restore')
+    if eligible is not None and not isinstance(eligible, bool):
+        raise ValueError('eligible_pr_restore must be boolean or null')
     comparison = compare_contexts(event['comparison']) if event.get('comparison') is not None else None
     status = comparison['status'] if comparison else 'unknown'
     model, scope = event.get('timing_model', 'unknown'), reference(event.get('timing_scope'))
@@ -73,9 +76,71 @@ def layered_event(event):
                    costs['uncached_work_s'] - costs['work_s'] - costs['restore_s'] - costs['save_s'])
             economics_status = 'measured_supplied_comparison'
     hit = True if restore in {'exact_hit', 'fallback_hit'} else (False if restore == 'miss' else None)
-    return {'hit': hit, 'restore_outcome': restore, 'save_outcome': save,
+    return {'hit': hit, 'restore_outcome': restore, 'save_outcome': save, 'eligible_pr_restore': eligible,
             'comparison': comparison, 'timing_model': model, 'timing_scope': scope, **costs,
             'economics_status': economics_status, 'net_saved_s': net}
+
+
+def populations(data):
+    values = data.get('populations', [])
+    if not isinstance(values, list) or len(values) > MAX_ROWS:
+        raise ValueError('populations must be a bounded array')
+    result = {}
+    for row in values:
+        if not isinstance(row, dict) or set(row) != {'cache', 'cohort', 'eligible_count', 'complete', 'scope', 'evidence'}:
+            raise ValueError('population requires cache, cohort, eligible_count, complete, scope and evidence')
+        key = tuple(reference(row[name]) for name in ('cache', 'cohort'))
+        if None in key or key in result:
+            raise ValueError('duplicate or missing population cache/cohort')
+        count, complete = row['eligible_count'], row['complete']
+        if count is not None and (type(count) is not int or not 0 <= count <= MAX_ROWS):
+            raise ValueError('eligible_count must be a bounded nonnegative integer or null')
+        if complete is not None and not isinstance(complete, bool):
+            raise ValueError('population complete must be boolean or null')
+        result[key] = {'eligible_count': count, 'complete': complete,
+                       'scope': reference(row['scope']), 'evidence': reference(row['evidence'])}
+    return result
+
+
+def exact_target(events, population, version):
+    """Assess one supplied eligible PR population; never infer exclusions from saves."""
+    result = {'definition': 'exact primary-key restores / all eligible PR restore attempts',
+              'operator': '>', 'threshold': 0.95, 'authenticated': False, 'population': population,
+              'status': 'unassessed', 'known_exact_fraction': None}
+    if version == '1':
+        return {**result, 'reasons': ['legacy_schema_has_no_eligible_population']}
+    eligible = [e for e in events if e['eligible_pr_restore'] is True]
+    counts = {name: sum(e['restore_outcome'] == name for e in eligible) for name in sorted(RESTORE_OUTCOMES)}
+    unknown_eligibility = sum(e['eligible_pr_restore'] is None for e in events)
+    result.update({'observed_eligible_count': len(eligible),
+                   'observed_ineligible_count': sum(e['eligible_pr_restore'] is False for e in events),
+                   'unknown_eligibility_count': unknown_eligibility,
+                   'eligible_outcomes': counts})
+    if population is None:
+        return {**result, 'reasons': ['eligible_population_not_supplied']}
+    expected = population['eligible_count']
+    if expected is not None and expected > 0 and len(eligible) <= expected:
+        result['known_exact_fraction'] = counts['exact_hit'] / expected
+    reasons = []
+    if population['complete'] is not True:
+        reasons.append('population_not_complete')
+    for key in ('eligible_count', 'scope', 'evidence'):
+        if population[key] is None:
+            reasons.append('population_' + key + '_unknown')
+    if expected is not None and expected != len(eligible):
+        reasons.append('eligible_count_mismatch')
+    if unknown_eligibility:
+        reasons.append('unknown_eligibility')
+    if counts['unknown']:
+        reasons.append('unknown_restore_outcomes')
+    if counts['disabled']:
+        reasons.append('eligible_restore_disabled')
+    if reasons:
+        return {**result, 'status': 'unknown', 'reasons': reasons}
+    if expected == 0:
+        return {**result, 'reasons': ['empty_eligible_population']}
+    return {**result, 'status': 'met' if counts['exact_hit'] * 100 > 95 * expected else 'not_met',
+            'reasons': []}
 
 
 def analyze(data):
@@ -83,8 +148,9 @@ def analyze(data):
     if schema not in ('ci-cache-events/1', 'ci-cache-events/2'):
         raise ValueError('unsupported cache event schema')
     version = schema.rsplit('/', 1)[1]
-    if version == '2' and set(data) - {'schema', 'events'}:
+    if version == '2' and set(data) - {'schema', 'events', 'populations'}:
         raise ValueError('unknown version 2 document fields')
+    population_map = populations(data) if version == '2' else {}
     groups = defaultdict(list)
     seen = set()
     for event in rows(data, schema, 'events'):
@@ -103,6 +169,8 @@ def analyze(data):
         if normalized['net_saved_s'] is not None and not math.isfinite(normalized['net_saved_s']):
             raise ValueError('cost overflow')
         groups[(event['cache'], event['cohort'])].append({'id': event['id'], **normalized, **byte_counts})
+    for key in population_map:
+        groups.setdefault(key, [])
     result = []
     for (cache, cohort), events in sorted(groups.items()):
         events = sorted(events, key=lambda e: e['id'])
@@ -112,17 +180,19 @@ def analyze(data):
         total = sum(measured)
         if not math.isfinite(total):
             raise ValueError('cost overflow')
-        complete = len(measured) == len(events)
+        complete = bool(events) and len(measured) == len(events)
         negative_ids = [e['id'] for e in events if e['net_saved_s'] is not None and e['net_saved_s'] < 0]
         outcomes = ('outcome',) if version == '1' else ('restore_outcome', 'save_outcome')
         counts = {key + '_counts': {name: sum(e[key] == name for e in events) for name in sorted({e[key] for e in events})}
                   for key in outcomes}
         result.append({'cache': cache, 'cohort': cohort, 'events': events, **counts,
-                       'total_restored_bytes': sum(e['restored_bytes'] for e in events) if all(e['restored_bytes'] is not None for e in events) else None,
-                       'total_saved_bytes': sum(e['saved_bytes'] for e in events) if all(e['saved_bytes'] is not None for e in events) else None,
+                       'total_restored_bytes': sum(e['restored_bytes'] for e in events) if events and all(e['restored_bytes'] is not None for e in events) else None,
+                       'total_saved_bytes': sum(e['saved_bytes'] for e in events) if events and all(e['saved_bytes'] is not None for e in events) else None,
                        'sample_count': len(events), 'known_hits': hits, 'known_misses': misses,
                        'unknown_hits': len(events) - hits - misses,
                        'observed_hit_rate': hits / (hits + misses) if hits + misses else None,
+                       'observed_hit_rate_definition': 'known generic hits / (known generic hits + known misses); excludes unknowns',
+                       'exact_hit_target': exact_target(events, population_map.get((cache, cohort)), version),
                        'economics_samples': len(measured), 'unknown_economics': len(events) - len(measured),
                        'known_net_saved_s': total if measured else None,
                        'total_net_saved_s': total if complete else None,
@@ -136,6 +206,7 @@ def analyze(data):
                            'Savings are runner seconds, not critical-path or monetary savings.',
                            'Partial economics cannot establish total savings.',
                            'Negative-event warnings describe observations, not established population regressions or automatic cache-removal decisions.',
+                           'The exact-hit target assesses a supplied eligible PR population, not future performance or merge eligibility.',
                            *(['Layer identities, fingerprints, timing scopes and evidence references are supplied, never authenticated.',
                               'Sequential components must not overlap; elapsed totals must cover the same complete scope, including post-job saves.',
                               'Cache economics does not establish fresh full-suite execution or merge eligibility.'] if version == '2' else [])]}

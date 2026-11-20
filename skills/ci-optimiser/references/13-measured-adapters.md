@@ -202,6 +202,60 @@ Cache reuse and measured economics never establish fresh required test
 execution. Keep test-result reuse separate from dependency/build reuse and run
 the full suite freshly on the combined merge-queue candidate before main.
 
+### Exact-hit target and eligible PR population
+
+`observed_hit_rate` remains the generic diagnostic: known hits divided by known
+hits plus known misses, excluding unknowns. In `/2`, both exact and fallback
+restores count as generic hits. This is not the strict `>95%` exact-hit target.
+
+For target assessment, each `/2` event explicitly declares
+`eligible_pr_restore: true`, `false`, or `null` (missing means unknown). Do not
+infer eligibility from a saved archive, a write-disabled policy, a hit, or a
+miss. Keep eligible lockfile-change misses, errors and unresolved attempts in
+scope. Document justified exclusions such as save-only observations in the
+population evidence; do not exclude misses to improve the rate.
+
+Supply a top-level `populations` array. Each row has exactly `cache`, `cohort`,
+`eligible_count`, `complete`, `scope` and `evidence`, with a unique cache/cohort
+pair. Count is the independently collected full eligible PR population (an
+integer from 0 through 100000 or null). `complete` is boolean or null; scope and
+evidence are bounded references or null. Define repository, PR events, time
+window, attempts and eligibility rules in the reviewed scope/evidence. A caller
+assertion does not authenticate provider completeness.
+
+```json
+{
+  "schema":"ci-cache-events/2",
+  "populations":[{"cache":"deps","cohort":"PR-window-a","eligible_count":3,"complete":true,"scope":"repo-a/PRs/attempt-1/window-a","evidence":"review/all-eligible-restores"}],
+  "events":[
+    {"id":"exact","cache":"deps","cohort":"PR-window-a","eligible_pr_restore":true,"restore_outcome":"exact_hit"},
+    {"id":"fallback","cache":"deps","cohort":"PR-window-a","eligible_pr_restore":true,"restore_outcome":"fallback_hit"},
+    {"id":"unresolved","cache":"deps","cohort":"PR-window-a","eligible_pr_restore":true,"restore_outcome":"unknown"}
+  ]
+}
+```
+
+Here the generic hit rate is 100%, while `exact_hit_target.known_exact_fraction`
+is `1/3` and target status is `unknown`. The target reports eligible exact,
+fallback, miss, restore-failure, disabled and unknown outcomes separately, as
+well as unknown eligibility and observed ineligible events. Missing events stay
+visible as a population-count mismatch. A population with no supplied events
+still gets an output group; it cannot silently disappear or imply zero cost.
+
+Target status is `met` or `not_met` only for a complete supplied nonempty
+population with matching counts, known scope/evidence, and no unresolved
+eligibility or outcomes. An eligible-but-disabled restore is unresolved for this
+purpose. Exactly 95% is `not_met`; comparison uses integer counts without
+rounding. Missing population evidence or legacy `/1` eligibility is `unassessed`;
+partial or contradictory evidence is `unknown`. No eligible population is also
+`unassessed`, not a vacuous pass. A known exact fraction above 95% does not make
+incomplete evidence complete.
+
+`met` describes this supplied population only, not an authenticated policy
+certificate, future guarantee, or successful workflow. Restore failures remain
+counted and job failures remain failures. High exact-hit rates never override
+negative measured cache economics or authorize test-result reuse.
+
 ### Remaining integration work
 
 Provider fixtures cover the contracts of the new collectors; they are not live
