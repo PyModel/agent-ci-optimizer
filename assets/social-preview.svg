@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-labelledby="title description">
+  <title id="title">ci-optimiser by PyModel</title>
+  <desc id="description">An agent skill for faster CI and honest results. Measure, optimise, verify. Full suite before main.</desc>
+  <rect width="1280" height="640" fill="#111b2a"/>
+  <rect x="24" y="24" width="1232" height="592" rx="24" fill="none" stroke="#35455a" stroke-width="2"/>
+  <g font-family="DejaVu Sans, sans-serif">
+    <text x="80" y="112" fill="#91efbb" font-size="25" font-weight="700" letter-spacing="3">PYMODEL</text>
+    <path d="M254 88v28" stroke="#35455a" stroke-width="2"/>
+    <text x="282" y="111" fill="#a2b2c5" font-size="20" letter-spacing="2">AGENT SKILL</text>
+    <text x="76" y="285" fill="#f1f5f9" font-size="100" font-weight="700" letter-spacing="-4">ci-optimiser</text>
+    <text x="80" y="363" fill="#f1f5f9" font-size="39" letter-spacing="-0.8">Faster CI. Honest results.</text>
+    <text x="81" y="418" fill="#a2b2c5" font-size="24">Measure. Optimise. Verify.</text>
+    <path d="M80 492h1120" stroke="#35455a" stroke-width="2"/>
+    <circle cx="90" cy="552" r="7" fill="#91efbb"/>
+    <text x="112" y="560" fill="#c6d2df" font-size="22">Full suite before main.</text>
+    <text x="1200" y="560" fill="#a2b2c5" font-size="22" text-anchor="end">github.com/PyModel/ci-optimiser</text>
+  </g>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="862" y="186" width="338" height="238" rx="28" fill="#152234" stroke="#35455a" stroke-width="2"/>
+    <path d="M914 275h214m0 44v27a20 20 0 0 1-20 20H934a20 20 0 0 1-20-20v-23m-10 10 10-10 10 10" stroke="#657991" stroke-width="4"/>
+    <circle cx="914" cy="275" r="15" fill="#152234" stroke="#a2b2c5" stroke-width="3"/>
+    <circle cx="1012" cy="275" r="15" fill="#152234" stroke="#a2b2c5" stroke-width="3"/>
+    <circle cx="1128" cy="275" r="39" fill="#91efbb"/>
+    <path d="m1110 275 13 13 23-26" stroke="#111b2a" stroke-width="6"/>
+  </g>
+</svg>
