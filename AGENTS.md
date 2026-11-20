@@ -12,4 +12,6 @@ This repo is one agent skill, `ci-optimiser`: [SKILL.md](SKILL.md), one-hop
   "Not confirmed" list.
 - Before committing: `python3 -m unittest discover -s tests -v` (also checks links/anchors)
   and `actionlint` on `.github/workflows/`.
+- Enable the executable pre-push hook using the preservation-aware procedure in
+  [README.md](README.md#local-pre-push-hook); its nine-second check supplements full CI.
 - The install is a symlink to this working tree: uncommitted edits reach every agent at once.
