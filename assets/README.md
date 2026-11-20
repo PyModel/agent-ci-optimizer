@@ -1,9 +1,9 @@
 # Repository artwork
 
-- `banner.svg` is the compact README banner.
+- `banner.svg` preserves the original compact banner.
 - `social-preview.svg` is the editable source for the link-sharing card.
-- `social-preview.png` is the opaque 1280 × 640 export uploaded in
-  **Repository Settings → General → Social preview**.
+- `social-preview.png` is the opaque 1280 × 640 export used as the README banner
+  and uploaded in **Repository Settings → General → Social preview**.
 
 The card shares the banner's colors and pipeline/checkmark motif. Its text states
 the skill's purpose without presenting target timings as measured results.

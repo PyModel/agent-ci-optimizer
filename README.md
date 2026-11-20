@@ -1,4 +1,4 @@
-# ![ci-optimiser](assets/banner.svg)
+# ![ci-optimiser — Faster CI. Honest results.](assets/social-preview.png)
 
 [![skills.sh installs](https://skills.sh/b/pymodel/ci-optimiser)](https://skills.sh/pymodel/ci-optimiser)
 
